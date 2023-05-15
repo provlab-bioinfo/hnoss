@@ -1,4 +1,4 @@
-import time, os, re
+import time, os, re, pandas as pd
 
 # region: Functions
 
@@ -44,16 +44,79 @@ def makeFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile: st
 
     return (out if outFile is None else outFile)
 
+    
+def subsetFlatFileDB(inFile: str, outFile: str = None, includeTerms: list[str] = [], excludeTerms: list[str] = []):
+    """Subsets a flat file database. 
+    :param inFile: The original database path
+    :param outFile: The path to save the subset database in
+    :param includeTerms: Strings that paths must include. 
+    :param excludeTerms: Strings that paths must not include. Suggest using: "Freebayes", "qc", "work"
+    """
+    if isinstance(excludeTerms, str): excludeTerms = [excludeTerms]
+    if isinstance(includeTerms, str): includeTerms = [includeTerms]
+
+    out = []
+    if outFile is not None:
+        out = open(outFile,'w')
+
+    with open(inFile) as inDB:
+        for line in inDB:
+            inc = any(include in line for include in includeTerms) if len(includeTerms) else True
+            exc = not any(exclude in line for exclude in excludeTerms) if len(excludeTerms) else True
+            if (inc and exc): 
+                if outFile is not None: 
+                    out.write(line)
+                else: 
+                    out.append(str.strip(line))
+    
+    return (out if outFile is None else outFile)
+
+def getBAMdb(seqPath, metadata, BAMdb, BAMfiles) -> pd.DataFrame:
+    nanoBamRE = ".primertrimmed.rg.sorted.bam"
+    illBamRE = ".mapped.primertrimmed.sorted.bam"
+
+    if (not os.path.isfile(BAMdb)):
+        makeFlatFileDB(seqPath, fileExt=((".bam")), outFile=BAMdb, excludeDirs=["work","tmp_bam","qc","test","troubleshooting"])
+
+    if (not os.path.isfile(BAMfiles)):
+        BAMs = subsetFlatFileDB(BAMdb, includeTerms=[nanoBamRE, illBamRE])
+        BAMs = pd.DataFrame(BAMs, columns=["BAMPath"])
+        BAMs['Key'] = BAMs['BAMPath'].transform(lambda x: os.path.basename(x).split('.')[0])
+        BAMs = BAMs.drop_duplicates(subset=['Key'], keep='last')
+        metadata = pd.read_csv(metadata, low_memory=False) 
+        BAMs = BAMs.merge(metadata, on='Key', how='left')
+        BAMs = BAMs[["Key", "BAMPath", "current_lineage"]].dropna()
+        BAMs.to_csv(BAMfiles)
+    else:
+        BAMs = pd.read_csv(BAMfiles) 
+
+    return BAMs
+
+def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) -> tuple[pd.DataFrame, pd.DataFrame]:
+    n = min(len(BAMs),n)
+    BAMs = BAMs.sample(n = n)
+
+    #lineage = BAMs.groupby(['current_lineage'])['current_lineage'].count()
+    lineage = pd.DataFrame({'count' : BAMs.groupby("current_lineage").size()}).reset_index()
+    lineage['prop'] = lineage['count'].transform(lambda x: round(100*x/len(lineage),2))
+
+    return (BAMs, lineage)
+
 # endregion
 
 os.chdir(os.path.dirname(__file__))
-path = "/nfs/APL_Genomics/virus_covid19/routine_seq/2023_01_Runs"
-BAMfiles = "./BAMfiles.txt"
+seqPath = "/nfs/APL_Genomics/virus_covid19/routine_seq/2023_01_Runs"
+metadata = "/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/results/allData.csv"
+BAMdb = "./data/BAMdb.txt"
+BAMfiles = "./data/BAMfiles.csv"
 
-if (not os.path.isfile(BAMfiles)):
-    makeFlatFileDB(path, fileExt=((".bam")), outFile="BAMfiles", excludeDirs=["work","tmp_bam","qc","test","troubleshooting"])
+BAMs = getBAMdb(seqPath, metadata, BAMdb, BAMfiles)
+synList = getSyntheticList(BAMs, n=100)
+print(synList)
 
-BAMfiles = [line.strip() for line in open(BAMfiles, 'r')]
+
+
+
 
 
 
