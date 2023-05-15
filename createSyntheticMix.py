@@ -1,4 +1,4 @@
-import time, os, re, pandas as pd
+import time, os, re, pandas as pd, subprocess, random
 
 # region: Functions
 
@@ -93,14 +93,23 @@ def getBAMdb(seqPath, metadata, BAMdb, BAMfiles) -> pd.DataFrame:
     return BAMs
 
 def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) -> tuple[pd.DataFrame, pd.DataFrame]:
-    n = min(len(BAMs),n)
-    BAMs = BAMs.sample(n = n)
+    BAMs = BAMs.sample(n = min(len(BAMs),n))
+    return BAMs
 
-    #lineage = BAMs.groupby(['current_lineage'])['current_lineage'].count()
+def getLineageProportions(BAMs: pd.DataFrame):
     lineage = pd.DataFrame({'count' : BAMs.groupby("current_lineage").size()}).reset_index()
     lineage['prop'] = lineage['count'].transform(lambda x: round(100*x/len(lineage),2))
+    return lineage
 
-    return (BAMs, lineage)
+def generateSyntheticReads(BAMs: pd.DataFrame, workDir: str, outFile: str, depth:int = 10, seed:str = "seed"):
+    BAMpaths = BAMs["BAMPath"].values.tolist()
+    BAMpaths.sort()
+    with open(outFile,mode="wb") as out:
+        for BAM in BAMpaths:
+            subsample = depth/len(BAMs)
+            command = ["samtools", "view", "-s", str(subsample), BAM]
+            subprocess.run(command, stdout=out)     
+    return(outFile)
 
 # endregion
 
@@ -109,15 +118,14 @@ seqPath = "/nfs/APL_Genomics/virus_covid19/routine_seq/2023_01_Runs"
 metadata = "/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/results/allData.csv"
 BAMdb = "./data/BAMdb.txt"
 BAMfiles = "./data/BAMfiles.csv"
+variantsOut = "./results/variants.out" 
+depthsOut = "./results/depth.out"
+ref = "./data/ncov.fasta"
+workDir = "./work"
+synBAMs = "./results/synBAMs.bam"
+frejyaOut = "./results/freyja.tsv"
 
-BAMs = getBAMdb(seqPath, metadata, BAMdb, BAMfiles)
+BAMs = getBAMdb(seqPath = seqPath, metadata = metadata, BAMdb = BAMdb, BAMfiles = BAMfiles)
 synList = getSyntheticList(BAMs, n=100)
-print(synList)
-
-
-
-
-
-
-
-
+synProp = getLineageProportions(synList)
+synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 0.1)
