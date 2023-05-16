@@ -128,6 +128,15 @@ def runFrejya(BAMfile, variantOut, depthsOut, ref, outFile):
 
     return outFile
 
+def compareFreyja(freyjaOut, lineage):
+    freyja = pd.read_csv(freyjaOut, sep="\t", index_col=0)
+    freyja = freyja.loc[["lineages","abundances"]].transpose()
+    freyja["lineages"] = freyja["lineages"].str.split(" ")
+    freyja["abundances"] = freyja["abundances"].str.split(" ")
+    freyja = freyja.explode(["lineages","abundances"]).reset_index(drop=True)
+    freyja['abundances'] = freyja['abundances'].transform(lambda x: '{:,.3f}'.format(100*float(x)))
+    freyja = freyja.merge(lineage, how="outer", on="lineages", suffixes=["_freyja","_synthetic"])
+    return(freyja)
 # endregion
 
 os.chdir(os.path.dirname(__file__))
@@ -150,3 +159,6 @@ synProp = getLineageProportions(synList)
 synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 1)
 frejya = runFrejya(BAMfile = synBAMs, variantOut = variantsOut, depthsOut = depthsOut, ref = ref, outFile = frejyaOut)
 
+results = compareFreyja(frejyaOut, synProp)
+print(results)
+results.to_csv(compareOut, sep="\t", index = False)
