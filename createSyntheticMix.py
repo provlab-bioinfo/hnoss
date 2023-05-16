@@ -1,4 +1,4 @@
-import time, os, re, pandas as pd, subprocess, random
+import time, os, re, pandas as pd, subprocess, random, tempfile
 
 # region: Functions
 
@@ -43,8 +43,7 @@ def makeFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile: st
     if (verbose): print("   Parsed {} files and found {} FASTA files ({}s)                 ".format(nFiles,nFasta,str(round(time.time() - startTime,2))), end="\r")
 
     return (out if outFile is None else outFile)
-
-    
+  
 def subsetFlatFileDB(inFile: str, outFile: str = None, includeTerms: list[str] = [], excludeTerms: list[str] = []):
     """Subsets a flat file database. 
     :param inFile: The original database path
@@ -92,24 +91,42 @@ def getBAMdb(seqPath, metadata, BAMdb, BAMfiles) -> pd.DataFrame:
 
     return BAMs
 
-def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) -> tuple[pd.DataFrame, pd.DataFrame]:
+def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) ->  pd.DataFrame:
     BAMs = BAMs.sample(n = min(len(BAMs),n))
     return BAMs
 
-def getLineageProportions(BAMs: pd.DataFrame):
+def getLineageProportions(BAMs: pd.DataFrame) -> pd.DataFrame:
     lineage = pd.DataFrame({'count' : BAMs.groupby("current_lineage").size()}).reset_index()
-    lineage['prop'] = lineage['count'].transform(lambda x: round(100*x/len(lineage),2))
-    return lineage
+    lineage = lineage.rename(columns={"current_lineage": "lineages"})
+    samples = lineage['count'].sum()
+    lineage['abundances'] = lineage['count'].transform(lambda x: '{:,.3f}'.format(100*(x/samples)))
+    return lineage.drop(columns=['count'])
 
-def generateSyntheticReads(BAMs: pd.DataFrame, workDir: str, outFile: str, depth:int = 10, seed:str = "seed"):
+def generateSyntheticReads(BAMs: pd.DataFrame, outFile: str, depth:int = 10, seed:str = "seed") -> str:
     BAMpaths = BAMs["BAMPath"].values.tolist()
     BAMpaths.sort()
-    with open(outFile,mode="wb") as out:
-        for BAM in BAMpaths:
+
+    with tempfile.NamedTemporaryFile() as tmp, open(outFile,mode="wb") as out:
+        for idx, BAM in enumerate(BAMpaths):
             subsample = depth/len(BAMs)
-            command = ["samtools", "view", "-s", str(subsample), BAM]
-            subprocess.run(command, stdout=out)     
+            if (idx == 0): command = ["samtools", "view", "-h","-s", str(subsample), BAM]
+            else: command = ["samtools", "view", "-s", str(subsample), BAM]
+            subprocess.run(command, stdout=tmp)     
+        command = ["samtools", "sort", tmp.name]
+        subprocess.run(command, stdout=out)   
+        tmp.close()    
+    
     return(outFile)
+
+def runFrejya(BAMfile, variantOut, depthsOut, ref, outFile):
+    # https://github.com/andersen-lab/Freyja
+    # freyja variants [bamfile] --variants [variant outfile name] --depths [depths outfile name] --ref [reference.fa]
+    subprocess.run(["freyja", "variants", BAMfile, "--variants", variantOut, "--depths", depthsOut, "--ref", ref])
+
+    # freyja demix [variants-file] [depth-file] --output [output-file]
+    subprocess.run(["freyja","demix",variantOut,depthsOut,"--output",outFile])
+
+    return outFile
 
 # endregion
 
@@ -118,14 +135,18 @@ seqPath = "/nfs/APL_Genomics/virus_covid19/routine_seq/2023_01_Runs"
 metadata = "/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/results/allData.csv"
 BAMdb = "./data/BAMdb.txt"
 BAMfiles = "./data/BAMfiles.csv"
-variantsOut = "./results/variants.out" 
+variantsOut = "./results/variants.tsv" 
 depthsOut = "./results/depth.out"
 ref = "./data/ncov.fasta"
 workDir = "./work"
 synBAMs = "./results/synBAMs.bam"
+synPropOut = "./results/synProp.tsv"
 frejyaOut = "./results/freyja.tsv"
+compareOut = "./results/results.tsv"
 
 BAMs = getBAMdb(seqPath = seqPath, metadata = metadata, BAMdb = BAMdb, BAMfiles = BAMfiles)
-synList = getSyntheticList(BAMs, n=100)
+synList = getSyntheticList(BAMs, n=97)
 synProp = getLineageProportions(synList)
-synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 0.1)
+synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 1)
+frejya = runFrejya(BAMfile = synBAMs, variantOut = variantsOut, depthsOut = depthsOut, ref = ref, outFile = frejyaOut)
+
