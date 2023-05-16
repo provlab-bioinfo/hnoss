@@ -70,7 +70,15 @@ def subsetFlatFileDB(inFile: str, outFile: str = None, includeTerms: list[str] =
     
     return (out if outFile is None else outFile)
 
-def getBAMdb(seqPath, metadata, BAMdb, BAMfiles) -> pd.DataFrame:
+def getBAMdb(seqPath: str, metadata, BAMdb, BAMfiles) -> pd.DataFrame:
+    """Generates list of BAM files for a specific folder.
+    Uses regular expressions for the expected BAM output files from Nanopore and Illumina sequencing
+    :param seqPath: The path to the folder containing BAM files
+    :param metadata: The path to the CSV containing patient metadata
+    :param BAMdb: The path to the output database. Will generate it if the file is not present.
+    :param BAMfiles: The path to output the collated BAM file and patient metadata. Will generate it if the file is not present.
+    :return: A dataframe containing 'Key', 'BAMpath', 'current_lineage'
+    """    
     nanoBamRE = ".primertrimmed.rg.sorted.bam"
     illBamRE = ".mapped.primertrimmed.sorted.bam"
 
@@ -92,17 +100,32 @@ def getBAMdb(seqPath, metadata, BAMdb, BAMfiles) -> pd.DataFrame:
     return BAMs
 
 def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) ->  pd.DataFrame:
+    """Creates a random sample of COVID BAM entries
+    :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
+    :param n: the number of BAM files to randomly select, defaults to 100
+    :return: The subsetted dataframe
+    """    
     BAMs = BAMs.sample(n = min(len(BAMs),n))
     return BAMs
 
 def getLineageProportions(BAMs: pd.DataFrame) -> pd.DataFrame:
+    """Gets a summary of lineage proportions for COVID BAM samples
+    :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
+    :return: A dataframe containing columns for 'lineages' and 'abundances' of COVID strains
+    """    
     lineage = pd.DataFrame({'count' : BAMs.groupby("current_lineage").size()}).reset_index()
     lineage = lineage.rename(columns={"current_lineage": "lineages"})
     samples = lineage['count'].sum()
-    lineage['abundances'] = lineage['count'].transform(lambda x: '{:,.3f}'.format(100*(x/samples)))
+    lineage['abundances'] = lineage['count'].transform(lambda x: sigfig(100*(x/samples)))
     return lineage.drop(columns=['count'])
 
 def generateSyntheticReads(BAMs: pd.DataFrame, outFile: str, depth:int = 10, seed:str = "seed") -> str:
+    """Generates a synthetic BAM file from a list of COVID samples
+    :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
+    :param outFile: The path to the output BAM file
+    :param depth: The depth of sampling for the input files. For each sample [depth]/[# of samples] = % of total reads , defaults to 10
+    :return: outFile; the path to the output BAM file
+    """    
     BAMpaths = BAMs["BAMPath"].values.tolist()
     BAMpaths.sort()
 
@@ -118,8 +141,14 @@ def generateSyntheticReads(BAMs: pd.DataFrame, outFile: str, depth:int = 10, see
     
     return(outFile)
 
-def runFrejya(BAMfile, variantOut, depthsOut, ref, outFile):
-    # https://github.com/andersen-lab/Freyja
+def runFrejya(BAMfile: str, variantOut: str, depthsOut: str, ref: str, outFile:str):
+    """Runs a Freyja analysis on mixed COVID samples. See https://github.com/andersen-lab/Freyja
+    :param BAMfile: The BAM file to de-mix    
+    :param variantOut: The path to the output variant file
+    :param depthsOut: The path to the output depths file
+    :param outFile: The path to the output Freyja file
+    :return: outFile: The path to the output Freyja file 
+    """    
     # freyja variants [bamfile] --variants [variant outfile name] --depths [depths outfile name] --ref [reference.fa]
     subprocess.run(["freyja", "variants", BAMfile, "--variants", variantOut, "--depths", depthsOut, "--ref", ref])
 
@@ -129,14 +158,34 @@ def runFrejya(BAMfile, variantOut, depthsOut, ref, outFile):
     return outFile
 
 def compareFreyja(freyjaOut, lineage):
+    """Compares a Freyja analysis to a synthetic input
+    :param freyjaOut: The path to the Frejya output TSV
+    :param lineage: The lineage of a synthetic sample, from getLineageProportions()
+    :return: A dataframe containing the abundances (%) of each variant and parent variant 
+    """    
     freyja = pd.read_csv(freyjaOut, sep="\t", index_col=0)
     freyja = freyja.loc[["lineages","abundances"]].transpose()
     freyja["lineages"] = freyja["lineages"].str.split(" ")
     freyja["abundances"] = freyja["abundances"].str.split(" ")
     freyja = freyja.explode(["lineages","abundances"]).reset_index(drop=True)
-    freyja['abundances'] = freyja['abundances'].transform(lambda x: '{:,.3f}'.format(100*float(x)))
+    freyja['abundances'] = freyja['abundances'].transform(lambda x: sigfig(100*float(x)))
     freyja = freyja.merge(lineage, how="outer", on="lineages", suffixes=["_freyja","_synthetic"])
+    freyja['parent_lineages'] = freyja['lineages'].transform(lambda x: x.split('.')[0])
+    freyja2 = freyja.groupby('parent_lineages').sum().reset_index()
+    freyja2.rename(columns={'lineages':'lineagesBAD', 'parent_lineages':'lineages'}, inplace=True)
+    freyja2.rename(columns={'lineagesBAD':'parent_lineages'}, inplace=True)
+    freyja2.sort_values(by=['abundances_freyja'], inplace=True)
+    freyja = pd.concat([freyja, freyja2]).drop(columns=['parent_lineages'])
     return(freyja)
+
+def sigfig(val, n:int = 3):
+    """Forces value to specific number of decimal points
+    :param val: The value to format
+    :param n: The number of decimal places
+    :return: The truncated float
+    """    
+    return float('{0:.{1}f}'.format(float(val),n))
+
 # endregion
 
 os.chdir(os.path.dirname(__file__))
@@ -154,11 +203,12 @@ frejyaOut = "./results/freyja.tsv"
 compareOut = "./results/results.tsv"
 
 BAMs = getBAMdb(seqPath = seqPath, metadata = metadata, BAMdb = BAMdb, BAMfiles = BAMfiles)
-synList = getSyntheticList(BAMs, n=97)
+synList = getSyntheticList(BAMs, n=10)
 synProp = getLineageProportions(synList)
-synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 1)
+synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 10)
 frejya = runFrejya(BAMfile = synBAMs, variantOut = variantsOut, depthsOut = depthsOut, ref = ref, outFile = frejyaOut)
 
+#synProp = pd.read_csv(synPropOut, sep="\t")
 results = compareFreyja(frejyaOut, synProp)
 print(results)
 results.to_csv(compareOut, sep="\t", index = False)
