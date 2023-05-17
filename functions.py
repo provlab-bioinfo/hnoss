@@ -1,7 +1,6 @@
-import time, os, re, pandas as pd, subprocess, random, tempfile
+import time, os, re, pandas as pd, subprocess, tempfile
 
-# region: Functions
-
+#region: database
 def makeFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile: str = None, maxFilesRead:int = 100000000, excludeDirs: list[str] = [], verbose: bool = True):
     """Finds all files that fit a regex in a specified folder
     :param dir: Directory to search
@@ -86,19 +85,21 @@ def getBAMdb(seqPath: str, metadata, BAMdb, BAMfiles) -> pd.DataFrame:
         makeFlatFileDB(seqPath, fileExt=((".bam")), outFile=BAMdb, excludeDirs=["work","tmp_bam","qc","test","troubleshooting"])
 
     if (not os.path.isfile(BAMfiles)):
-        BAMs = subsetFlatFileDB(BAMdb, includeTerms=[nanoBamRE, illBamRE])
+        BAMs = subsetFlatFileDB(BAMdb, includeTerms=[nanoBamRE, illBamRE],  excludeTerms=["work","ncovIllumina","bai","test","results_old","results_unmerged"])
         BAMs = pd.DataFrame(BAMs, columns=["BAMPath"])
         BAMs['Key'] = BAMs['BAMPath'].transform(lambda x: os.path.basename(x).split('.')[0])
         BAMs = BAMs.drop_duplicates(subset=['Key'], keep='last')
         metadata = pd.read_csv(metadata, low_memory=False) 
         BAMs = BAMs.merge(metadata, on='Key', how='left')
-        BAMs = BAMs[["Key", "BAMPath", "current_lineage"]].dropna()
-        BAMs.to_csv(BAMfiles)
+        BAMs = BAMs[["Key", "BAMPath", "current_lineage","collection_date"]].dropna()
+        BAMs.to_csv(BAMfiles, index=False)
     else:
-        BAMs = pd.read_csv(BAMfiles) 
+        BAMs = pd.read_csv(BAMfiles, index_col=False) 
 
     return BAMs
+#endregion
 
+#region: synthetic samples
 def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) ->  pd.DataFrame:
     """Creates a random sample of COVID BAM entries
     :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
@@ -141,22 +142,6 @@ def generateSyntheticReads(BAMs: pd.DataFrame, outFile: str, depth:int = 10, see
     
     return(outFile)
 
-def runFrejya(BAMfile: str, variantOut: str, depthsOut: str, ref: str, outFile:str):
-    """Runs a Freyja analysis on mixed COVID samples. See https://github.com/andersen-lab/Freyja
-    :param BAMfile: The BAM file to de-mix    
-    :param variantOut: The path to the output variant file
-    :param depthsOut: The path to the output depths file
-    :param outFile: The path to the output Freyja file
-    :return: outFile: The path to the output Freyja file 
-    """    
-    # freyja variants [bamfile] --variants [variant outfile name] --depths [depths outfile name] --ref [reference.fa]
-    subprocess.run(["freyja", "variants", BAMfile, "--variants", variantOut, "--depths", depthsOut, "--ref", ref])
-
-    # freyja demix [variants-file] [depth-file] --output [output-file]
-    subprocess.run(["freyja","demix",variantOut,depthsOut,"--output",outFile])
-
-    return outFile
-
 def compareFreyja(freyjaOut, lineage):
     """Compares a Freyja analysis to a synthetic input
     :param freyjaOut: The path to the Frejya output TSV
@@ -177,7 +162,27 @@ def compareFreyja(freyjaOut, lineage):
     freyja2.sort_values(by=['abundances_freyja'], inplace=True)
     freyja = pd.concat([freyja, freyja2]).drop(columns=['parent_lineages'])
     return(freyja)
+#endregion
 
+#region: Freyja
+def runFrejya(BAMfile: str, variantOut: str, depthsOut: str, ref: str, outFile:str):
+    """Runs a Freyja analysis on mixed COVID samples. See https://github.com/andersen-lab/Freyja
+    :param BAMfile: The BAM file to de-mix    
+    :param variantOut: The path to the output variant file
+    :param depthsOut: The path to the output depths file
+    :param outFile: The path to the output Freyja file
+    :return: outFile: The path to the output Freyja file 
+    """    
+    # freyja variants [bamfile] --variants [variant outfile name] --depths [depths outfile name] --ref [reference.fa]
+    subprocess.run(["freyja", "variants", BAMfile, "--variants", variantOut, "--depths", depthsOut, "--ref", ref])
+
+    # freyja demix [variants-file] [depth-file] --output [output-file]
+    subprocess.run(["freyja","demix",variantOut,depthsOut,"--output",outFile])
+
+    return outFile
+#endregion
+
+#region: accFuncs
 def sigfig(val, n:int = 3):
     """Forces value to specific number of decimal points
     :param val: The value to format
@@ -185,30 +190,4 @@ def sigfig(val, n:int = 3):
     :return: The truncated float
     """    
     return float('{0:.{1}f}'.format(float(val),n))
-
-# endregion
-
-os.chdir(os.path.dirname(__file__))
-seqPath = "/nfs/APL_Genomics/virus_covid19/routine_seq/2023_01_Runs"
-metadata = "/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/results/allData.csv"
-BAMdb = "./data/BAMdb.txt"
-BAMfiles = "./data/BAMfiles.csv"
-variantsOut = "./results/variants.tsv" 
-depthsOut = "./results/depth.out"
-ref = "./data/ncov.fasta"
-workDir = "./work"
-synBAMs = "./results/synBAMs.bam"
-synPropOut = "./results/synProp.tsv"
-frejyaOut = "./results/freyja.tsv"
-compareOut = "./results/results.tsv"
-
-BAMs = getBAMdb(seqPath = seqPath, metadata = metadata, BAMdb = BAMdb, BAMfiles = BAMfiles)
-synList = getSyntheticList(BAMs, n=10)
-synProp = getLineageProportions(synList)
-synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 10)
-frejya = runFrejya(BAMfile = synBAMs, variantOut = variantsOut, depthsOut = depthsOut, ref = ref, outFile = frejyaOut)
-
-#synProp = pd.read_csv(synPropOut, sep="\t")
-results = compareFreyja(frejyaOut, synProp)
-print(results)
-results.to_csv(compareOut, sep="\t", index = False)
+#endregion
