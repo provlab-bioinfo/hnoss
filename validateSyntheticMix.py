@@ -16,7 +16,7 @@ compareOut = "./results/results.tsv"
 
 BAMs = getBAMdb(seqPath = seqPath, metadata = metadata, BAMdb = BAMdb, BAMfiles = BAMfiles)
 synList = getSyntheticList(BAMs, n=10)
-synProp = getLineageProportions(synList)
+synProp = getSyntheticLineageProportions(synList)
 synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 10)
 frejya = runFrejya(BAMfile = synBAMs, variantOut = variantsOut, depthsOut = depthsOut, ref = ref, outFile = frejyaOut)
 
