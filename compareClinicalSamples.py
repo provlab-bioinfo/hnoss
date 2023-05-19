@@ -1,17 +1,27 @@
 from functions import *
 
 os.chdir(os.path.dirname(__file__))
-seqPath = "/nfs/APL_Genomics/virus_covid19/routine_seq/"
-metadata = "/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/results/allData.csv"
-BAMdb = "/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/data/routineSeqDB.txt"
-BAMfiles = "./data/BAMfiles.csv"
-variantsOut = "./results/variants.tsv" 
-depthsOut = "./results/depth.out"
-ref = "./data/ncov.fasta"
-workDir = "./work"
-synBAMs = "./results/synBAMs.bam"
-synPropOut = "./results/synProp.tsv"
-frejyaOut = "./results/freyja.tsv"
-compareOut = "./results/results.tsv"
+freyjaOut = ["./data/freyja1.tsv","./data/freyja2.tsv"]
+fileCol = "file"
+lineageCol = "lineages"
+abundCol = "abundances"
+lineages = pd.DataFrame()
 
-BAMs = getBAMdb(seqPath = seqPath, metadata = metadata, BAMdb = BAMdb, BAMfiles = BAMfiles)
+def getLongForm(file):
+    lineage = getFreyjaLineageProportions(file)
+    lineage[fileCol] = os.path.basename(file)
+    return(lineage)
+
+lineages = pd.concat([getLongForm(file) for file in freyjaOut]).reset_index(drop=True)
+lineages = lineages.groupby([fileCol, lineageCol])[abundCol].first().unstack()
+cols = lineages.columns.tolist()
+lineages["Dominant"] = lineages[cols].idxmax(axis=1)
+lineages["Dominant%"] = lineages[cols].max(axis='columns')
+lineages["SD"] = lineages[cols].std(axis=1)
+
+
+
+
+
+print(lineages)
+

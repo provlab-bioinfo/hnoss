@@ -109,16 +109,6 @@ def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) ->  pd.DataFrame:
     BAMs = BAMs.sample(n = min(len(BAMs),n))
     return BAMs
 
-def getLineageProportions(BAMs: pd.DataFrame) -> pd.DataFrame:
-    """Gets a summary of lineage proportions for COVID BAM samples
-    :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
-    :return: A dataframe containing columns for 'lineages' and 'abundances' of COVID strains
-    """    
-    lineage = pd.DataFrame({'count' : BAMs.groupby("current_lineage").size()}).reset_index()
-    lineage = lineage.rename(columns={"current_lineage": "lineages"})
-    samples = lineage['count'].sum()
-    lineage['abundances'] = lineage['count'].transform(lambda x: sigfig(100*(x/samples)))
-    return lineage.drop(columns=['count'])
 
 def generateSyntheticReads(BAMs: pd.DataFrame, outFile: str, depth:int = 10, seed:str = "seed") -> str:
     """Generates a synthetic BAM file from a list of COVID samples
@@ -142,27 +132,52 @@ def generateSyntheticReads(BAMs: pd.DataFrame, outFile: str, depth:int = 10, see
     
     return(outFile)
 
+def getSyntheticLineageProportions(BAMs: pd.DataFrame, parentLineage:bool = True) -> pd.DataFrame:
+    """Gets a summary of lineage proportions for COVID BAM samples
+    :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
+    :return: A dataframe containing columns for 'lineages' and 'abundances' of COVID strains
+    """    
+    lineage = pd.DataFrame({'count' : BAMs.groupby("current_lineage").size()}).reset_index()
+    lineage = lineage.rename(columns={"current_lineage": "lineages"})
+    samples = lineage['count'].sum()
+    lineage['abundances'] = lineage['count'].transform(lambda x: sigfig(100*(x/samples)))
+    lineage = lineage.drop(columns=['count'])
+    if (parentLineage): lineage = getParentLineage(lineage)
+    return lineage
+
 def compareFreyja(freyjaOut, lineage):
     """Compares a Freyja analysis to a synthetic input
     :param freyjaOut: The path to the Frejya output TSV
     :param lineage: The lineage of a synthetic sample, from getLineageProportions()
     :return: A dataframe containing the abundances (%) of each variant and parent variant 
     """    
-    freyja = pd.read_csv(freyjaOut, sep="\t", index_col=0)
+    freyja = getFreyjaLineageProportions(freyjaOut)
+    print(freyja)
+    print(lineage)
+
+
+    freyja = freyja.merge(lineage, how="outer", on="lineages", suffixes=["_freyja","_synthetic"])
+    return(freyja)
+#endregion
+
+def getParentLineage(abundances):
+    abundances['parent_lineages'] = abundances['lineages'].transform(lambda x: "VF." + x.split('.')[0])
+    abundances2 = abundances.groupby('parent_lineages').sum().reset_index()
+    abundances2.rename(columns={'lineages':'lineagesBAD', 'parent_lineages':'lineages'}, inplace=True)
+    abundances2.rename(columns={'lineagesBAD':'parent_lineages'}, inplace=True)
+    abundances2.sort_values(by=['abundances'], inplace=True)
+    abundances = pd.concat([abundances, abundances2]).drop(columns=['parent_lineages'])
+    return(abundances)
+
+def getFreyjaLineageProportions(file:str, parentLineage:bool = True):
+    freyja = pd.read_csv(file, sep="\t", index_col=0)
     freyja = freyja.loc[["lineages","abundances"]].transpose()
     freyja["lineages"] = freyja["lineages"].str.split(" ")
     freyja["abundances"] = freyja["abundances"].str.split(" ")
     freyja = freyja.explode(["lineages","abundances"]).reset_index(drop=True)
     freyja['abundances'] = freyja['abundances'].transform(lambda x: sigfig(100*float(x)))
-    freyja = freyja.merge(lineage, how="outer", on="lineages", suffixes=["_freyja","_synthetic"])
-    freyja['parent_lineages'] = freyja['lineages'].transform(lambda x: x.split('.')[0])
-    freyja2 = freyja.groupby('parent_lineages').sum().reset_index()
-    freyja2.rename(columns={'lineages':'lineagesBAD', 'parent_lineages':'lineages'}, inplace=True)
-    freyja2.rename(columns={'lineagesBAD':'parent_lineages'}, inplace=True)
-    freyja2.sort_values(by=['abundances_freyja'], inplace=True)
-    freyja = pd.concat([freyja, freyja2]).drop(columns=['parent_lineages'])
+    if (parentLineage): freyja = getParentLineage(freyja)
     return(freyja)
-#endregion
 
 #region: Freyja
 def runFrejya(BAMfile: str, variantOut: str, depthsOut: str, ref: str, outFile:str):
