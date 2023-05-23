@@ -1,5 +1,6 @@
 import time, os, re, pandas as pd, subprocess, tempfile
 from datetime import datetime
+from searchTools import *
 
 #region: pandas static vars
 fileCol = "file"
@@ -17,74 +18,6 @@ BAMPathCol = "BAMPath"
 #endregion
 
 #region: database
-def makeFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile: str = None, maxFilesRead:int = 100000000, excludeDirs: list[str] = [], verbose: bool = True):
-    """Finds all files that fit a regex in a specified folder
-    :param dir: Directory to search
-    :param regex: The regex to search by
-    :param outFile: The output file path
-    :param maxFilesRead: The maximum number of files to read, defaults to 1000
-    :param excludeDirs: List of folders to exclude
-    :param verbose: Print progress messages?, defaults to True
-    """    
-    nFasta = nFiles = speed = 0
-    out = []
-    lastCheck = startTime = time.time()
-    excludeDirs = "|".join(excludeDirs)
-
-    if outFile is not None:
-        out = open(outFile,'w')
-
-    if (verbose): print("Searching for files...")
-
-    for root, dirs, files in os.walk(dir, topdown=True):
-        dirs.sort(reverse=True)
-        if nFasta >= maxFilesRead: break
-        for file in files:
-            nFiles += 1
-            match = file.endswith((fileExt)) if (regex is None) else re.match(regex, file)
-            if match:
-                if re.search(excludeDirs, root) != None: continue
-                path = str(root) + "/" + str(file)
-                if outFile is not None: 
-                    out.write(path + "\n")
-                else: 
-                    out.append(path)
-                nFasta += 1
-            if (nFiles % 1000 == 0): 
-                speed = str(round(1000/(time.time() - lastCheck)))
-                lastCheck = time.time()
-            if (verbose): print("   Parsed {} files and found {} FASTA files ({}/s)                ".format(nFiles,nFasta,speed), end="\r")
-
-    if (verbose): print("   Parsed {} files and found {} FASTA files ({}s)                 ".format(nFiles,nFasta,str(round(time.time() - startTime,2))), end="\r")
-
-    return (out if outFile is None else outFile)
-  
-def subsetFlatFileDB(inFile: str, outFile: str = None, includeTerms: list[str] = [], excludeTerms: list[str] = []):
-    """Subsets a flat file database. 
-    :param inFile: The original database path
-    :param outFile: The path to save the subset database in
-    :param includeTerms: Strings that paths must include. 
-    :param excludeTerms: Strings that paths must not include. Suggest using: "Freebayes", "qc", "work"
-    """
-    if isinstance(excludeTerms, str): excludeTerms = [excludeTerms]
-    if isinstance(includeTerms, str): includeTerms = [includeTerms]
-
-    out = []
-    if outFile is not None:
-        out = open(outFile,'w')
-
-    with open(inFile) as inDB:
-        for line in inDB:
-            inc = any(include in line for include in includeTerms) if len(includeTerms) else True
-            exc = not any(exclude in line for exclude in excludeTerms) if len(excludeTerms) else True
-            if (inc and exc): 
-                if outFile is not None: 
-                    out.write(line)
-                else: 
-                    out.append(str.strip(line))
-    
-    return (out if outFile is None else outFile)
-
 def getBAMdb(seqPath: str, BAMdb, BAMdata, metadata: str = None) -> pd.DataFrame:
     """Generates list of BAM files for a specific folder.
     Uses regular expressions for the expected BAM output files from Nanopore and Illumina sequencing
@@ -98,11 +31,11 @@ def getBAMdb(seqPath: str, BAMdb, BAMdata, metadata: str = None) -> pd.DataFrame
     illBamRE = ".mapped.primertrimmed.sorted.bam"
 
     if (not os.path.isfile(BAMdb)):
-        makeFlatFileDB(seqPath, fileExt=((".bam")), outFile=BAMdb, excludeDirs=["work","tmp_bam","qc","test","troubleshooting"])
+        generateFlatFileDB(seqPath, fileExt=((".bam")), outFile=BAMdb)#, excludeDirs=["work","tmp_bam","qc","test","troubleshooting"])
 
     if (not os.path.isfile(BAMdata)):
-        BAMs = subsetFlatFileDB(BAMdb, includeTerms=[nanoBamRE, illBamRE],  excludeTerms=["work","ncovIllumina","bai","test","results_old","results_unmerged"])
-        BAMs = pd.DataFrame(BAMs, columns=[BAMPathCol])
+        BAMs = searchFlatFileDB(BAMdb, includeTerms=[nanoBamRE, illBamRE])#,  excludeTerms=["work","ncovIllumina","bai","test","results_old","results_unmerged"])
+        BAMs = pd.DataFrame(BAMs, columns=[BAMPathCol])       
         BAMs['Key'] = BAMs[BAMPathCol].transform(lambda x: os.path.basename(x).split('.')[0])
         BAMs = BAMs.drop_duplicates(subset=['Key'], keep='last')
         if (metadata is not None):
@@ -175,14 +108,14 @@ def compareFreyja(freyjaOut, lineage):
 #endregion
 
 #region: Freyja
-def runFrejya(BAMfile: list[str], outDir: str, ref: str) -> str:
+def runFrejya(BAMfile: list[str], outDir: str, ref: str, refname: str = None) -> str:
     """Runs a Freyja analysis on mixed COVID samples. See https://github.com/andersen-lab/Freyja
     :param BAMfile: The BAM files to de-mix    
     :param outDir: The output directory
     :param ref: The genome FASTA reference
     """    
     if isinstance(BAMfile, list):
-        freyjaOut = [runFrejya(file, outDir, ref) for file in BAMfile]
+        freyjaOut = [runFrejya(file, outDir, ref, refname) for file in BAMfile]
     else:
         getOutFile = lambda ext: os.path.join(outDir, os.path.splitext(os.path.basename(BAMfile))[0] + ext)
         variantsOut = getOutFile(".variants.tsv")
@@ -190,7 +123,14 @@ def runFrejya(BAMfile: list[str], outDir: str, ref: str) -> str:
         freyjaOut = getOutFile(".freyja.tsv")
 
         # freyja variants [bamfile] --variants [variant outfile name] --depths [depths outfile name] --ref [reference.fa]
-        subprocess.run(["freyja", "variants", BAMfile, "--variants", variantsOut, "--depths", depthsOut, "--ref", ref])
+        cmd = ["freyja", "variants", BAMfile, "--variants", variantsOut, "--depths", depthsOut, "--ref", ref]
+        #if (refname is not None): cmd = cmd + ["--refname", refname]
+        subprocess.run(cmd)
+
+        # Not sure why necessary. Cannot use --refname in above command, or index file is not found, and cannot have zero count reads, or below command has a log error
+        depths = pd.read_csv(depthsOut, names = ["ref","pos","nt","count"], sep="\t")
+        depths = depths[depths.ref.isin([refname])]
+        depths.to_csv(depthsOut, header=None, index=None, sep="\t")
 
         # freyja demix [variants-file] [depth-file] --output [output-file]
         subprocess.run(["freyja","demix",variantsOut,depthsOut,"--output",freyjaOut])
@@ -277,7 +217,7 @@ def formatFreyjaOutput(freyjaPath):
     freyjaConf = getFreyjaConfidence(freyjaPath)
     freyja = freyja.merge(freyjaConf, on=fileCol)
     freyja = getFreyjaVariantStats(freyja)
-    freyja = locateFreyjaSamples(freyja)
+    #freyja = locateFreyjaSamples(freyja)
     return(freyja)
 #endregion
 
