@@ -5,6 +5,7 @@ from searchTools import *
 #region: pandas static vars
 fileCol = "file"
 lineageCol = "lineages"
+summarizedCol = "summarized"
 parentLineageCol = "parent_lineages"
 abundCol = "abundances"
 dominantCol = "Dominant"
@@ -12,8 +13,8 @@ dominantPercentCol = "Dominant %"
 sdCol = "SD"
 locationCol = "Location"
 collectDateCol = "Collection Date"
-residualCol = "Residual"
-coverageCol = "Coverage"
+residualCol = "resid"
+coverageCol = "coverage"
 BAMPathCol = "BAMPath"
 #endregion
 
@@ -134,72 +135,47 @@ def runFrejya(BAMfile: list[str], outDir: str, ref: str, refname: str = None) ->
 
         # freyja demix [variants-file] [depth-file] --output [output-file]
         subprocess.run(["freyja","demix",variantsOut,depthsOut,"--output",freyjaOut])
-    return freyjaOut    
 
-def getParentLineage(abundances: pd.DataFrame) -> pd.DataFrame:
-    """Get parent strain lineages from Freyja output
-    :param abundances: A DataFrame containing full lineages and abundances
-    :return: A DataFrame containing only parent lineages and abundances
-    """    
-    abundances[parentLineageCol] = abundances[lineageCol].transform(lambda x: "VF_" + x.removeprefix("Var_").split('.')[0])
-    abundances = abundances.drop(columns=[lineageCol]).groupby(parentLineageCol).sum().reset_index()
-    abundances = abundances.sort_values(by=[abundCol]).rename(columns={parentLineageCol: lineageCol})
-    return(abundances)
+    return freyjaOut
 
-def getFreyjaLineageProportions(file:str, parentLineage:bool = True) -> pd.DataFrame:
-    """Gets the lineage proportions from a Freyja output file
+def aggregateFreyja(freyja, freyjaOut):    
+    #freyja aggregate [directory-of-output-files] --output [aggregated-filename.tsv] --ext output
+    subprocess.run(["freyja","aggregate",freyja,"--output", freyjaOut,"--ext","freyja.tsv"])
+    return freyjaOut
+
+def plotFreyja(freyja, output):
+    #freyja plot [aggregated-filename-tsv] --output [plot-filename(.pdf,.png,etc.)]
+    subprocess.run(["freyja","plot",freyja,"--output", "summ-" + output])
+    subprocess.run(["freyja","plot",freyja,"--lineages","--output", "lineage-" + output])        
+
+def startFreyjaDashboard(freyja, metadata, output):
+    #freyja dash [aggregated-filename-tsv] [sample-metadata.csv] [dashboard-title.txt] [introContent.txt] --output [outputname.html]
+    subprocess.run(["freyja","dash",freyja,metadata,"--output",output])
+
+def formatFreyjaOutput(file:str) -> pd.DataFrame:
+    """Gets the lineage proportions from a single Freyja output file
     :param file: The path to the Freyja output file
-    :param parentLineage: Should parent lineages also be included?, defaults to True
     :return: A DataFrame with columns for lineages and abundances
     """    
-    freyja = pd.read_csv(file, sep="\t", index_col=0)
-    freyja = freyja.loc[[lineageCol,abundCol]].transpose()
+    if (isinstance(file, list)): # For case of inputting individual files
+        freyja = [pd.read_csv(f, sep="\t", index_col = 0) for f in file]
+        freyja = [f.transpose() for f in freyja]
+        freyja = pd.concat([freyja])
+    else:
+        freyja = pd.read_csv(file, sep="\t", index_col = 0)
+        if (len(freyja.columns) == 1): # For a single file inputted
+            freyja = freyja.transpose()
+
+    freyja = freyja.rename_axis('file').reset_index()
     freyja[lineageCol] = freyja[lineageCol].str.split(" ")
     freyja[abundCol] = freyja[abundCol].str.split(" ")
     freyja = freyja.explode([lineageCol,abundCol]).reset_index(drop=True)
     freyja[abundCol] = freyja[abundCol].transform(lambda x: sigfig(100*float(x)))
-    freyja[lineageCol] = freyja[lineageCol].transform(lambda x: "Var_" + x)
-    if (parentLineage): freyja = pd.concat([freyja, getParentLineage(freyja)])
+    freyja = freyja.groupby([fileCol, residualCol, coverageCol, lineageCol])[abundCol].first().unstack()
     return(freyja)
 
-def getFreyjaConfidence(freyjaPath:str) -> pd.DataFrame:
-    """Gets residual and coverage from Freyja output files
-    :param file: The path to the Freyja output file
-    :return: A DataFrame with columns for residuals and coverage
-    """    
-    freyja = [pd.read_csv(file, sep="\t", index_col=0) for file in freyjaPath]
-    freyja = pd.concat([f.loc[["resid","coverage"]].transpose() for f in freyja])
-    freyja = freyja.rename(columns={"resid": residualCol, "coverage": coverageCol})
-    freyja = freyja.applymap(sigfig)
-    freyja[fileCol] = [os.path.basename(path) for path in freyjaPath]
-    freyja = freyja.set_index(fileCol)
-    return (freyja)
-
-def collateFreyjaSamples(freyjaPath: list[str]) -> pd.DataFrame:
-    """Collates wastewater samples into long form table
-    :param freyjaOut: Paths to the Freyja output files
-    """    
-    def getLongForm(file):
-        lineage = getFreyjaLineageProportions(file)
-        lineage[fileCol] = os.path.basename(file)
-        return(lineage)
-
-    freyja = pd.concat([getLongForm(file) for file in freyjaPath]).reset_index(drop=True)
-    freyja = freyja.groupby([fileCol, lineageCol])[abundCol].first().unstack()
-    return (freyja)
-
-def getFreyjaVariantStats(freyja: pd.DataFrame) -> pd.DataFrame:
-    """Adds lineage statistics to a long form Freyja table
-    :param freyja: A DataFrame from collateFreyjaSamples()
-    :return: A DataFrame with variant statistics
-    """    
-    cols = freyja.columns.tolist()
-    cols = [i for i in cols if "Var_" in i]
-    freyja[dominantCol] = freyja[cols].idxmax(axis=1)
-    freyja[dominantPercentCol] = freyja[cols].max(axis='columns')
-    freyja[sdCol] = freyja[cols].std(axis=1)
-    freyja[sdCol] = freyja[sdCol].apply(sigfig)
-    return (freyja)
+def collapseFreyjaLineage(freyja: pd.DataFrame):
+    print(")")
 
 def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame: 
     """Adds location and collection date to Freyja DataFrame
@@ -211,14 +187,6 @@ def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame:
     freyja[collectDateCol] = freyja[fileCol].transform(lambda x: datetime.strptime(x[3:9], '%y%m%d').strftime("%Y-%m-%d"))
     freyja = freyja.set_index(fileCol)
     return (freyja)
-
-def formatFreyjaOutput(freyjaPath):
-    freyja = collateFreyjaSamples(freyjaPath)
-    freyjaConf = getFreyjaConfidence(freyjaPath)
-    freyja = freyja.merge(freyjaConf, on=fileCol)
-    freyja = getFreyjaVariantStats(freyja)
-    #freyja = locateFreyjaSamples(freyja)
-    return(freyja)
 #endregion
 
 #region: accFuncs
