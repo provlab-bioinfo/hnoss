@@ -18,7 +18,7 @@ def mlocateFile(file, mLocateDB):
     except subprocess.CalledProcessError:
         return(None)   
 
-printFound = lambda nFiles, nFound, speed: print("   Parsed {} files and found {} files ({}s)                 ".format(nFiles,nFound,speed),end="\r")
+printFound = lambda nFiles, nFound, speed, end="\r": print("   Parsed {} files and found {} files ({}s)                 ".format(nFiles,nFound,speed),end=end)
 def generateFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile: str = None, maxFiles:int = 100000000, excludeDirs: list[str] = [], verbose: bool = True):
     """Finds all files that fit a regex in a specified folder
     :param dir: Directory to search
@@ -33,10 +33,13 @@ def generateFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile
     lastCheck = startTime = time.time()
     excludeDirs = "|".join(excludeDirs)
 
+    if not os.path.exists(dir):
+        raise Exception("Directory '" + dir + "' does not exist. Cannot generate database.")
+
     if outFile is not None:
         out = open(outFile,'w')
 
-    if (verbose): print("Searching for files...")
+    if (verbose): print("Populating database...")
 
     for root, dirs, files in os.walk(dir, topdown=True):
         dirs.sort(reverse=True)
@@ -57,7 +60,7 @@ def generateFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile
                 lastCheck = time.time()
             if (verbose): printFound(nFiles,nFound,speed)
 
-    if (verbose): printFound(nFiles,nFound,str(round(time.time() - startTime,2)))
+    if (verbose): printFound(nFiles,nFound,str(round(time.time() - startTime,2)),"\n")
     return (out if outFile is None else outFile)
 
 def searchFlatFileDB(file: str, outFile: str = None, searchTerms: list[str] = [], includeTerms: list[str] = [], excludeTerms: list[str] = [], caseSensitive = False, verbose = True):
@@ -77,6 +80,9 @@ def searchFlatFileDB(file: str, outFile: str = None, searchTerms: list[str] = []
         includeTerms = [term.lower() for term in includeTerms]
         excludeTerms = [term.lower() for term in excludeTerms]
 
+    if not os.path.exists(file):
+        raise Exception("File '" + file + "' does not exist. Cannot generate database.")
+
     if outFile is not None:
         out = open(outFile,'w')
     else:
@@ -95,7 +101,7 @@ def searchFlatFileDB(file: str, outFile: str = None, searchTerms: list[str] = []
             exc = not any(term in lineCheck for term in excludeTerms) if len(excludeTerms) else True
             if (fnd and inc and exc): 
                 if outFile is not None: 
-                    out.write(line.strip())
+                    out.write(line)
                 else: 
                     out.append(line.strip())
                 nFound += 1
@@ -104,7 +110,7 @@ def searchFlatFileDB(file: str, outFile: str = None, searchTerms: list[str] = []
                 lastCheck = time.time()
             if (verbose): printFound(nFiles,nFound,speed)
     
-    if (verbose): printFound(nFiles,nFound,str(round(time.time() - startTime,2)))
+    if (verbose): printFound(nFiles,nFound,str(round(time.time() - startTime,2)),"\n")
     return (out if outFile is None else outFile)
 
 def expandZipFlatFileDB(file: str):
