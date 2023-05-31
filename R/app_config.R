@@ -9,7 +9,7 @@
 #'
 #' @noRd
 app_sys <- function(...) {
-  system.file(..., package = "dashboard")
+  system.file(..., package = "wwCOV")
 }
 
 
