@@ -1,6 +1,7 @@
-import time, os, re, pandas as pd, subprocess, tempfile
+import time, os, re, pandas as pd, subprocess, tempfile, numpy as np
 from datetime import datetime
 from searchTools import *
+from pango_aliasor.aliasor import Aliasor
 
 #region: pandas static vars
 fileCol = "file"
@@ -174,8 +175,30 @@ def formatFreyjaOutput(file:str) -> pd.DataFrame:
     freyja = freyja.groupby([fileCol, residualCol, coverageCol, lineageCol])[abundCol].first().unstack()
     return(freyja)
 
-def collapseFreyjaLineage(freyja: pd.DataFrame):
-    print(")")
+def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
+    """ Collapses Freyja lineages. Cannot parse down past "A","B" or any recombinant strains
+    :param freyja: A Freyja dataset
+    :param strains: The strains to parse down until
+    """    
+    aliasor = Aliasor()
+
+    while(True):
+        cols = list(freyja.columns)
+        cols = [col for col in cols if col not in [fileCol,residualCol,coverageCol]]    
+        badcols = set([strain for strain in cols if strain not in strains])
+        beforeCols = set(freyja.columns)
+
+        for strain in badcols: 
+            parent = aliasor.parent(strain)
+            if (parent == ""): continue
+            freyja = freyja.rename(columns={strain: parent})
+            
+        freyja = freyja.groupby(freyja.columns, axis=1).sum()
+        freyja = freyja.replace({0:np.nan})
+
+        if (beforeCols == set(freyja.columns)): break
+
+    return freyja
 
 def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame: 
     """Adds location and collection date to Freyja DataFrame
