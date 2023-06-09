@@ -189,15 +189,25 @@ def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
         beforeCols = set(freyja.columns)
 
         for strain in badcols: 
-            parent = aliasor.parent(strain)
-            if (parent == ""): continue
-            freyja = freyja.rename(columns={strain: parent})
+            freyja = collapseStrain(freyja, strain, aliasor)
             
         freyja = freyja.groupby(freyja.columns, axis=1).sum()
         freyja = freyja.replace({0:np.nan})
 
         if (beforeCols == set(freyja.columns)): break
 
+    return freyja
+
+def collapseStrain(freyja: pd.DataFrame, strain: str, aliasor:Aliasor = None):
+    """Collapse a single strain in a formatted Freyja dataset
+    :param freyja: A Freyja output dataset formatted with formatFreyjaOutput()
+    :param strain: The name of the strain to collapse. If it's a terminal parent (e.g., 'A','B', any 'X' strain), it cannot be collapsed further.
+    :param aliasor: A pango_aliasor object. Will be generated if not specified (adds significant runtime if done repeatedly), defaults to None
+    :return: A Freyja dataset with the collapsed strain (if possible)
+    """        
+    if (aliasor == None): aliasor = Aliasor()
+    parent = aliasor.parent(strain)
+    if (parent != ""): freyja = freyja.rename(columns={strain: parent})
     return freyja
 
 def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame: 
