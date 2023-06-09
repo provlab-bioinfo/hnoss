@@ -153,9 +153,9 @@ def startFreyjaDashboard(freyja, metadata, output):
     #freyja dash [aggregated-filename-tsv] [sample-metadata.csv] [dashboard-title.txt] [introContent.txt] --output [outputname.html]
     subprocess.run(["freyja","dash",freyja,metadata,"--output",output])
 
-def formatFreyjaOutput(file:str) -> pd.DataFrame:
-    """Gets the lineage proportions from a single Freyja output file
-    :param file: The path to the Freyja output file
+def formatFreyjaOutput(file:list[str]) -> pd.DataFrame:
+    """Gets the lineage proportions from Frejya output files(s)
+    :param file: The path to the Freyja output file(s)
     :return: A DataFrame with columns for lineages and abundances
     """    
     if (isinstance(file, list)): # For case of inputting individual files
@@ -177,7 +177,7 @@ def formatFreyjaOutput(file:str) -> pd.DataFrame:
 
 def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
     """ Collapses Freyja lineages. Cannot parse down past "A","B" or any recombinant strains
-    :param freyja: A Freyja dataset
+    :param freyja: A Freyja output dataset formatted with formatFreyjaOutput()
     :param strains: The strains to parse down until
     """    
     aliasor = Aliasor()
