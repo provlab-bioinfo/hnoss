@@ -1,6 +1,6 @@
 import time, os, re, pandas as pd, subprocess, tempfile, numpy as np
 from datetime import datetime
-from searchTools import *
+from analysis.searchTools import *
 from pango_aliasor.aliasor import Aliasor
 
 #region: pandas static vars
@@ -93,7 +93,7 @@ def getSyntheticLineageProportions(BAMs: pd.DataFrame, parentLineage:bool = True
     lineage = pd.DataFrame({'count' : BAMs.groupby("current_lineage").size()}).reset_index()
     lineage = lineage.rename(columns={"current_lineage": lineageCol})
     samples = lineage['count'].sum()
-    lineage[abundCol] = lineage['count'].transform(lambda x: sigfig(100*(x/samples)))
+    lineage[abundCol] = lineage['count'].transform(lambda x: float(sigfig(100*(x/samples))))
     lineage = lineage.drop(columns=['count'])
     if (parentLineage): lineage = getParentLineage(lineage)
     return lineage
@@ -171,7 +171,7 @@ def formatFreyjaOutput(file:list[str]) -> pd.DataFrame:
     freyja[lineageCol] = freyja[lineageCol].str.split(" ")
     freyja[abundCol] = freyja[abundCol].str.split(" ")
     freyja = freyja.explode([lineageCol,abundCol]).reset_index(drop=True)
-    freyja[abundCol] = freyja[abundCol].transform(lambda x: sigfig(100*float(x)))
+    freyja[abundCol] = freyja[abundCol].transform(lambda x: float(sigfig(100*float(x))))
     freyja = freyja.groupby([fileCol, residualCol, coverageCol, lineageCol])[abundCol].first().unstack()
     return(freyja)
 
@@ -249,5 +249,6 @@ def sigfig(val, n:int = 3):
     :param n: The number of decimal places
     :return: The truncated float
     """    
-    return float('{0:.{1}f}'.format(float(val),n))
+    # if (n == 0): return round(val)
+    return '{0:.{1}f}'.format(float(val),n)
 #endregion

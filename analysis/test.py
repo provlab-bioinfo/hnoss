@@ -1,7 +1,7 @@
 import time, os, re, pandas as pd, subprocess, tempfile
 from datetime import datetime
-from searchTools import *
-from functions import *
+from analysis.searchTools import *
+from analysis.functions import *
 
 os.chdir(os.path.dirname(__file__))
 #region: pandas static vars

@@ -1,4 +1,4 @@
-from functions import *
+from analysis.functions import *
 
 os.chdir(os.path.dirname(__file__))
 seqPath = "/nfs/APL_Genomics/virus_covid19/routine_seq/2023_01_Runs"

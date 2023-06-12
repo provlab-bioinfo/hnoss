@@ -1,4 +1,4 @@
-from functions import *
+from analysis.functions import *
 
 os.chdir(os.path.dirname(__file__))
 freyjaPath = "/nfs/APL_Genomics/virus_covid19/ww_covid/university_seq/freyja_test/results/all_data"
