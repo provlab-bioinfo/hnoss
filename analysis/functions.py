@@ -210,6 +210,26 @@ def collapseStrain(freyja: pd.DataFrame, strain: str, aliasor:Aliasor = None):
     if (parent != ""): freyja = freyja.rename(columns={strain: parent})
     return freyja
 
+def collapseSamples(freyja:pd.DataFrame, date = True, location = True):
+    """Collapses samples by dates and/or locations. Residuals and coverage are lost.
+    :param freyja: A Freyja output dataset formatted with formatFreyjaOutput()
+    :param date: Collapse by date?, defaults to True
+    :param location: Collapse by location?, defaults to True
+    :return: A DataFrame containing mean of each strain for dates and/or locations
+    """    
+    freyja.drop(columns=[coverageCol, residualCol])
+
+    if (date and not location):
+        freyja = freyja.groupby([collectDateCol]).mean()
+    if (location and not date):
+        freyja = freyja.groupby([locationCol]).mean()
+    if (date and location):
+        freyja = freyja.groupby([collectDateCol,locationCol]).mean()
+    if (not date and not location):
+        freyja = freyja.mean()
+
+    return freyja
+
 def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame: 
     """Adds location and collection date to Freyja DataFrame
     :param freyja: A DataFrame from collateFreyjaSamples()
