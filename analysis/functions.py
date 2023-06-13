@@ -1,23 +1,9 @@
 import time, os, re, pandas as pd, subprocess, tempfile, numpy as np
+import configSettings as cfg
+import searchTools as st
 from datetime import datetime
-from analysis.searchTools import *
-from pango_aliasor.aliasor import Aliasor
 
-#region: pandas static vars
-fileCol = "file"
-lineageCol = "lineages"
-summarizedCol = "summarized"
-parentLineageCol = "parent_lineages"
-abundCol = "abundances"
-dominantCol = "Dominant"
-dominantPercentCol = "Dominant %"
-sdCol = "SD"
-locationCol = "Location"
-collectDateCol = "Collection Date"
-residualCol = "resid"
-coverageCol = "coverage"
-BAMPathCol = "BAMPath"
-#endregion
+from pango_aliasor.aliasor import Aliasor
 
 #region: database
 def getBAMdb(seqPath: str, BAMdb, BAMdata, metadata: str = None) -> pd.DataFrame:
@@ -33,80 +19,24 @@ def getBAMdb(seqPath: str, BAMdb, BAMdata, metadata: str = None) -> pd.DataFrame
     illBamRE = ".mapped.primertrimmed.sorted.bam"
 
     if (not os.path.isfile(BAMdb)):
-        generateFlatFileDB(seqPath, fileExt=((".bam")), outFile=BAMdb)#, excludeDirs=["work","tmp_bam","qc","test","troubleshooting"])
+        st.generateFlatFileDB(seqPath, fileExt=((".bam")), outFile=BAMdb)#, excludeDirs=["work","tmp_bam","qc","test","troubleshooting"])
 
     if (not os.path.isfile(BAMdata)):
-        BAMs = searchFlatFileDB(BAMdb, includeTerms=[nanoBamRE, illBamRE])#,  excludeTerms=["work","ncovIllumina","bai","test","results_old","results_unmerged"])
-        BAMs = pd.DataFrame(BAMs, columns=[BAMPathCol])       
-        BAMs['Key'] = BAMs[BAMPathCol].transform(lambda x: os.path.basename(x).split('.')[0])
+        BAMs = st.searchFlatFileDB(BAMdb, includeTerms=[nanoBamRE, illBamRE])#,  excludeTerms=["work","ncovIllumina","bai","test","results_old","results_unmerged"])
+        BAMs = pd.DataFrame(BAMs, columns=[cfg.BAMPathCol])       
+        BAMs['Key'] = BAMs[cfg.BAMPathCol].transform(lambda x: os.path.basename(x).split('.')[0])
         BAMs = BAMs.drop_duplicates(subset=['Key'], keep='last')
         if (metadata is not None):
             metadata = pd.read_csv(metadata, low_memory=False) 
             BAMs = BAMs.merge(metadata, on='Key', how='left')
-            BAMs = BAMs[["Key", BAMPathCol, "current_lineage","collection_date"]].dropna()
+            BAMs = BAMs[["Key", cfg.BAMPathCol, "current_lineage","collection_date"]].dropna()
         else:
-            BAMs = BAMs[["Key", BAMPathCol]].dropna()
+            BAMs = BAMs[["Key", cfg.BAMPathCol]].dropna()
         BAMs.to_csv(BAMdata, index=False)
     else:
         BAMs = pd.read_csv(BAMdata, index_col=False) 
 
     return BAMs
-#endregion
-
-#region: synthetic samples
-def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) ->  pd.DataFrame:
-    """Creates a random sample of COVID BAM entries
-    :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
-    :param n: the number of BAM files to randomly select, defaults to 100
-    :return: The subsetted dataframe
-    """    
-    BAMs = BAMs.sample(n = min(len(BAMs),n))
-    return BAMs
-
-def generateSyntheticReads(BAMs: pd.DataFrame, outFile: str, depth:int = 10, seed:str = "seed") -> str:
-    """Generates a synthetic BAM file from a list of COVID samples
-    :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
-    :param outFile: The path to the output BAM file
-    :param depth: The depth of sampling for the input files. For each sample [depth]/[# of samples] = % of total reads , defaults to 10
-    :return: outFile; the path to the output BAM file
-    """    
-    BAMpaths = BAMs["BAMPath"].values.tolist()
-    BAMpaths.sort()
-
-    with tempfile.NamedTemporaryFile() as tmp, open(outFile,mode="wb") as out:
-        for idx, BAM in enumerate(BAMpaths):
-            subsample = depth/len(BAMs)
-            if (idx == 0): command = ["samtools", "view", "-h","-s", str(subsample), BAM]
-            else: command = ["samtools", "view", "-s", str(subsample), BAM]
-            subprocess.run(command, stdout=tmp)     
-        command = ["samtools", "sort", tmp.name]
-        subprocess.run(command, stdout=out)   
-        tmp.close()    
-    
-    return(outFile)
-
-def getSyntheticLineageProportions(BAMs: pd.DataFrame, parentLineage:bool = True) -> pd.DataFrame:
-    """Gets a summary of lineage proportions for COVID BAM samples
-    :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
-    :return: A dataframe containing columns for 'lineages' and 'abundances' of COVID strains
-    """    
-    lineage = pd.DataFrame({'count' : BAMs.groupby("current_lineage").size()}).reset_index()
-    lineage = lineage.rename(columns={"current_lineage": lineageCol})
-    samples = lineage['count'].sum()
-    lineage[abundCol] = lineage['count'].transform(lambda x: float(sigfig(100*(x/samples))))
-    lineage = lineage.drop(columns=['count'])
-    if (parentLineage): lineage = getParentLineage(lineage)
-    return lineage
-
-def compareFreyja(freyjaOut, lineage):
-    """Compares a Freyja analysis to a synthetic input
-    :param freyjaOut: The path to the Frejya output TSV
-    :param lineage: The lineage of a synthetic sample, from getLineageProportions()
-    :return: A dataframe containing the abundances (%) of each variant and parent variant 
-    """    
-    freyja = getFreyjaLineageProportions(freyjaOut)
-    freyja = freyja.merge(lineage, how="outer", on=lineageCol, suffixes=["_freyja","_synthetic"])
-    return(freyja)
 #endregion
 
 #region: Freyja
@@ -153,7 +83,7 @@ def startFreyjaDashboard(freyja, metadata, output):
     #freyja dash [aggregated-filename-tsv] [sample-metadata.csv] [dashboard-title.txt] [introContent.txt] --output [outputname.html]
     subprocess.run(["freyja","dash",freyja,metadata,"--output",output])
 
-def formatFreyjaOutput(file:list[str]) -> pd.DataFrame:
+def formatFreyjaLineage(file:list[str]) -> pd.DataFrame:
     """Gets the lineage proportions from Frejya output files(s)
     :param file: The path to the Freyja output file(s)
     :return: A DataFrame with columns for lineages and abundances
@@ -168,11 +98,11 @@ def formatFreyjaOutput(file:list[str]) -> pd.DataFrame:
             freyja = freyja.transpose()
 
     freyja = freyja.rename_axis('file').reset_index()
-    freyja[lineageCol] = freyja[lineageCol].str.split(" ")
-    freyja[abundCol] = freyja[abundCol].str.split(" ")
-    freyja = freyja.explode([lineageCol,abundCol]).reset_index(drop=True)
-    freyja[abundCol] = freyja[abundCol].transform(lambda x: float(sigfig(100*float(x))))
-    freyja = freyja.groupby([fileCol, residualCol, coverageCol, lineageCol])[abundCol].first().unstack()
+    freyja[cfg.lineageCol] = freyja[cfg.lineageCol].str.split(" ")
+    freyja[cfg.abundCol] = freyja[cfg.abundCol].str.split(" ")
+    freyja = freyja.explode([cfg.lineageCol,cfg.abundCol]).reset_index(drop=True)
+    freyja[cfg.abundCol] = freyja[cfg.abundCol].transform(lambda x: float(sigfig(100*float(x))))
+    freyja = freyja.groupby([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol])[cfg.abundCol].first().unstack()
     return(freyja)
 
 def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
@@ -184,7 +114,7 @@ def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
 
     while(True):
         cols = list(freyja.columns)
-        cols = [col for col in cols if col not in [fileCol,residualCol,coverageCol]]    
+        cols = [col for col in cols if col not in [cfg.fileCol, cfg.residualCol, cfg.coverageCol]]    
         badcols = set([strain for strain in cols if strain not in strains])
         beforeCols = set(freyja.columns)
 
@@ -217,14 +147,14 @@ def collapseSamples(freyja:pd.DataFrame, date = True, location = True):
     :param location: Collapse by location?, defaults to True
     :return: A DataFrame containing mean of each strain for dates and/or locations
     """    
-    freyja.drop(columns=[coverageCol, residualCol])
+    freyja.drop(columns=[cfg.coverageCol, cfg.residualCol])
 
     if (date and not location):
-        freyja = freyja.groupby([collectDateCol]).mean()
+        freyja = freyja.groupby([cfg.collectDateCol]).mean()
     if (location and not date):
-        freyja = freyja.groupby([locationCol]).mean()
+        freyja = freyja.groupby([cfg.locationCol]).mean()
     if (date and location):
-        freyja = freyja.groupby([collectDateCol,locationCol]).mean()
+        freyja = freyja.groupby([cfg.collectDateCol, cfg.locationCol]).mean()
     if (not date and not location):
         freyja = freyja.mean()
 
@@ -236,11 +166,14 @@ def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame:
     :return: A DataFrame with location and colletion data
     """    
     freyja = freyja.reset_index()
-    freyja[locationCol] = freyja[fileCol].transform(lambda x: x[0:2])
-    freyja[collectDateCol] = freyja[fileCol].transform(lambda x: datetime.strptime(x[3:9], '%y%m%d').strftime("%Y-%m-%d"))
-    freyja = freyja.set_index(fileCol)
+    freyja[cfg.locationCol] = freyja[cfg.fileCol].transform(lambda x: x[0:2])
+    freyja[cfg.collectDateCol] = freyja[cfg.fileCol].transform(lambda x: datetime.strptime(x[3:9], '%y%m%d').strftime("%Y-%m-%d"))
+    freyja = freyja.set_index(cfg.fileCol)
     return (freyja)
 #endregion
+
+def plotFreyja(freyja: pd.DataFrame) -> pd.DataFrame:
+    freyja = collapseSamples(freyja, date = True, location = True)
 
 #region: accFuncs
 def sigfig(val, n:int = 3):
