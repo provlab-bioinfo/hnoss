@@ -175,6 +175,45 @@ def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame:
 def plotFreyja(freyja: pd.DataFrame) -> pd.DataFrame:
     freyja = collapseSamples(freyja, date = True, location = True)
 
+def generateAuspiceFreqs(freyja:pd.DataFrame, outFile: str):
+    """Generates tip_frequences.json for Auspice. Each entry will have frequency proportion only for the day the reading was taken
+    :param freyja: a formatted Freyja DataFrame
+    :param outFile: The output JSON
+    """    
+    freyja[cfg.weekCol] = freyja[cfg.collectDateCol].transform(lambda x: fn.dateToFractionalWeek(x))
+
+    # Generate frequencies JSON
+    freqs = sorted(list(set(freyja[cfg.weekCol].values)))
+    freqs = pd.DataFrame(index = freyja.index.values.tolist(),columns = freqs)
+    for index, row in freyja.iterrows(): freqs.at[index, row[cfg.weekCol]] = 1
+    freqs.update(freqs.div(freqs.sum(axis=0),axis=1).fillna(0))
+    freqs[cfg.freqCol] = freqs.values.tolist()
+    pivots = list(freqs.columns)
+    pivots.remove(cfg.freqCol)
+    freqs = freqs[[cfg.freqCol]]
+    json = loads(freqs.to_json(orient="index"))
+    json.update(  {"generated_by": {
+        "program": "custom",
+        "version": "0.0.1"
+    }})
+    json.update({"pivots": pivots})
+    json = dumps(json, indent=4)
+
+    with open(outFile, "w") as out:
+        out.write(json)
+
+    # # Generate fake tree JSON
+    # freyja["div"] = 0.01
+    # freyja["num_date"] = freyja[cfg.weekCol].transform(lambda x: {"value": x,"confidence":[x,x]})
+    # tree = {}
+
+    # for index,row in freyja.iterrows():
+    #     row = row.to_dict()
+    #     print(row)
+    #     exit()
+
+#endregion
+
 #region: accFuncs
 def sigfig(val, n:int = 3):
     """Forces value to specific number of decimal points
