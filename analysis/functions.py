@@ -1,7 +1,7 @@
 import time, os, re, pandas as pd, subprocess, tempfile, numpy as np
 import configSettings as cfg
 import searchTools as st
-from datetime import datetime
+from ast import literal_eval
 
 from pango_aliasor.aliasor import Aliasor
 
@@ -91,16 +91,14 @@ def formatFreyjaLineage(file:list[str]) -> pd.DataFrame:
     if (isinstance(file, list)): # For case of inputting individual files
         freyja = [pd.read_csv(f, sep="\t", index_col = 0) for f in file]
         freyja = [f.transpose() for f in freyja]
-        freyja = pd.concat([freyja])
+        freyja = pd.concat(freyja)
     else:
         freyja = pd.read_csv(file, sep="\t", index_col = 0)
         if (len(freyja.columns) == 1): # For a single file inputted
             freyja = freyja.transpose()
 
     freyja = freyja.rename_axis('file').reset_index()
-    freyja[cfg.lineageCol] = freyja[cfg.lineageCol].str.split(" ")
-    freyja[cfg.abundCol] = freyja[cfg.abundCol].str.split(" ")
-    freyja = freyja.explode([cfg.lineageCol,cfg.abundCol]).reset_index(drop=True)
+        freyja[cfg.summarizedCol] = freyja[cfg.summarizedCol].apply(literal_eval)
     freyja[cfg.abundCol] = freyja[cfg.abundCol].transform(lambda x: float(sigfig(100*float(x))))
     freyja = freyja.groupby([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol])[cfg.abundCol].first().unstack()
     return(freyja)
