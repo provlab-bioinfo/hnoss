@@ -1,7 +1,12 @@
 import time, os, re, pandas as pd, subprocess, tempfile, numpy as np
 import configSettings as cfg
 import searchTools as st
+from datetime import datetime, date
+from json import loads, dumps
 from ast import literal_eval
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from scipy.stats import ttest_rel
 
 from pango_aliasor.aliasor import Aliasor
 
@@ -83,7 +88,7 @@ def startFreyjaDashboard(freyja, metadata, output):
     #freyja dash [aggregated-filename-tsv] [sample-metadata.csv] [dashboard-title.txt] [introContent.txt] --output [outputname.html]
     subprocess.run(["freyja","dash",freyja,metadata,"--output",output])
 
-def formatFreyjaLineage(file:list[str]) -> pd.DataFrame:
+def formatFreyjaLineage(file:list[str], summarized = False) -> pd.DataFrame:
     """Gets the lineage proportions from Frejya output files(s)
     :param file: The path to the Freyja output file(s)
     :return: A DataFrame with columns for lineages and abundances
@@ -98,9 +103,19 @@ def formatFreyjaLineage(file:list[str]) -> pd.DataFrame:
             freyja = freyja.transpose()
 
     freyja = freyja.rename_axis('file').reset_index()
+
+    if (summarized):
         freyja[cfg.summarizedCol] = freyja[cfg.summarizedCol].apply(literal_eval)
+        freyja = freyja.explode(cfg.summarizedCol).reset_index(drop=True)
+        freyja[[cfg.lineageCol, cfg.abundCol]] = pd.DataFrame(freyja[cfg.summarizedCol].tolist(), index=freyja.index)
+    else:
+        freyja[cfg.lineageCol] = freyja[cfg.lineageCol].str.split(" ")
+        freyja[cfg.abundCol] = freyja[cfg.abundCol].str.split(" ")
+        freyja = freyja.explode([cfg.lineageCol,cfg.abundCol]).reset_index(drop=True)
+
+    freyja = freyja.drop(columns=[cfg.summarizedCol])
     freyja[cfg.abundCol] = freyja[cfg.abundCol].transform(lambda x: float(sigfig(100*float(x))))
-    freyja = freyja.groupby([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol])[cfg.abundCol].first().unstack()
+    freyja = freyja.groupby([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol])[cfg.abundCol].first().unstack() 
     return(freyja)
 
 def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
@@ -168,8 +183,87 @@ def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame:
     freyja[cfg.collectDateCol] = freyja[cfg.fileCol].transform(lambda x: datetime.strptime(x[3:9], '%y%m%d').strftime("%Y-%m-%d"))
     freyja = freyja.set_index(cfg.fileCol)
     return (freyja)
+
+def normalizeStrains(freyja1: pd.DataFrame, freyja2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
+    """Matches the strain columns between two Freyja outputs
+    :param freyja1: the first DataFrame
+    :param freyja2: the second DataFrame
+    :return: The modified dataframes
+    """    
+    strains = list(set(freyja1.columns.values) | set(freyja2.columns.values))
+    freyja1 = freyja1.reindex(columns=strains)
+    freyja2 = freyja2.reindex(columns=strains)
+    return freyja1, freyja2
+
+def normalizeSamples(freyja1: pd.DataFrame, freyja2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
+    """Matches the strain columns between two Freyja outputs
+    :param freyja1: the first DataFrame
+    :param freyja2: the second DataFrame
+    :return: The modified dataframes
+    """    
+    freyja1 = freyja1.droplevel([cfg.residualCol, cfg.coverageCol])
+    freyja2 = freyja2.droplevel([cfg.residualCol, cfg.coverageCol])
+    indexes = list(set(freyja1.index.values) | set(freyja2.index.values))
+    freyja1 = freyja1.reindex(index=indexes)
+    freyja2 = freyja2.reindex(index=indexes)
+    return freyja1, freyja2
+
+def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", log = False):
+    freyja1, freyja2 = normalizeStrains(freyja1,freyja2)
+    freyja1, freyja2 = normalizeSamples(freyja1,freyja2)
+
+    x = freyja1.fillna(0).to_numpy().flatten()
+    y = freyja2.fillna(0).to_numpy().flatten()
+
+    idx = np.isfinite(x) & np.isfinite(y) & np.where(np.add(x,y) != 0,True,False)
+
+    x = x[idx]
+    y = y[idx]
+    sort = np.argsort(x)
+    x = x[sort]
+    y = y[sort]
+
+    print(ttest_rel(x,y))
+
+    if (type == "scatter"):        
+
+        # if (log):
+
+        #     # logx = [n*np.log(n) if n>=1 else 1 for n in x]
+        #     # logy = [n*np.log(n) if n>=1 else 1 for n in y]
+
+        #     # coefficients = np.polyfit(logx, logy, 1)
+        #     # polynomial = np.poly1d(coefficients)
+        #     # log_y_fit = polynomial(logx)  # <-- Changed
+
+        #     # plt.plot([0,50,100],[0,50,100])
+        #     # plt.scatter(x, y, s=5, alpha=0.5)
+        #     # plt.plot(x, 10**log_y_fit)     # <-- Changed
+        #     # plt.yscale('log')
+        #     # plt.xscale('log')
+        # else:
+        plt.plot([0,50,100],[0,50,100])
+        plt.scatter(x, y, s=5, alpha=0.5)
+        a, b = np.polyfit(x, y, 1)
+        plt.plot(x, a*x+b)
+
+        plt.xlabel(xlab)
+        plt.ylabel(ylab)
+
+        plt.show()
+
+    elif (type == "tukey"):
+        f, ax = plt.subplots(1, figsize = (8,5))
+        sm.graphics.mean_diff_plot(x, y, ax = ax)
+
+        #display Bland-Altman plot
+        plt.show()
+
+
+
 #endregion
 
+#region: plotting
 def plotFreyja(freyja: pd.DataFrame) -> pd.DataFrame:
     freyja = collapseSamples(freyja, date = True, location = True)
 
@@ -212,6 +306,7 @@ def generateAuspiceFreqs(freyja:pd.DataFrame, outFile: str):
 
 #endregion
 
+
 #region: accFuncs
 def sigfig(val, n:int = 3):
     """Forces value to specific number of decimal points
@@ -221,4 +316,16 @@ def sigfig(val, n:int = 3):
     """    
     # if (n == 0): return round(val)
     return '{0:.{1}f}'.format(float(val),n)
+
+def dateToFractionalWeek(isoDate):
+    """Converts a date to a week number
+    :param dat: The date to convert, in ISO format (YYYY-MM-DD)
+    :param frac: Should this return the fractional value? (e.g., year 2023, week 23 = 2023.[23/52] = 2023.442), defaults to False
+    """    
+    isoDate = date.fromisoformat(isoDate)
+    year = isoDate.strftime("%Y")
+    week = str(sigfig(int(isoDate.strftime("%V"))/52,3)[1:])
+    isoDate = str(year+week)
+    return(isoDate)
+
 #endregion
