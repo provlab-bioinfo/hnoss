@@ -208,7 +208,7 @@ def normalizeSamples(freyja1: pd.DataFrame, freyja2:pd.DataFrame) -> list[pd.Dat
     freyja2 = freyja2.reindex(index=indexes)
     return freyja1, freyja2
 
-def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", log = False):
+def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, log = False):
     freyja1, freyja2 = normalizeStrains(freyja1,freyja2)
     freyja1, freyja2 = normalizeSamples(freyja1,freyja2)
 
@@ -250,7 +250,7 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", log = False):
         plt.xlabel(xlab)
         plt.ylabel(ylab)
 
-        plt.show()
+
 
     elif (type == "tukey"):
         f, ax = plt.subplots(1, figsize = (8,5))
@@ -259,8 +259,10 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", log = False):
         #display Bland-Altman plot
         plt.show()
 
-
-
+    if outFile is None:
+        plt.show()
+    else:
+        plt.savefig(outFile)
 #endregion
 
 #region: plotting
