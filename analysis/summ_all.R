@@ -4,13 +4,13 @@ library(magrittr)
 library(rio)
 library(rlang)
 
-xlsx <- import("J:\\virus_covid19\\ww_covid\\mixed_samples_big_BN.csv")
-summCols <- xlsx %>% select(A_x:Zeta) %>% colnames() 
-lineCols <- xlsx %>% select(A_y:XZ) %>% colnames()
+xlsx <- import("K:\\projects\\alindsay\\Projects\\wwCOV\\results\\ncov-ww_upto_230728.csv")
+summCols <- xlsx %>% select(A_x:XCG) %>% colnames() 
+lineCols <- xlsx %>% select(A_y:'XBB.2.3* [Omicron (XBB.2.3.X)]') %>% colnames()
 
-summ <- xlsx %>% filter(coverage_x > 80)
+summ <- xlsx# %>% filter(coverage_x > 80)
 summ %<>% mutate(Max.Lineage=pmax(!!!rlang::syms(lineCols),na.rm=TRUE))
-summ %<>% filter(Max.Lineage < 95)
+#summ %<>% filter(Max.Lineage < 95)
 all_na <- function(x) any(!is.na(x))
 summ %<>% select_if(all_na)
 
@@ -41,5 +41,5 @@ out <- df
 out %<>% separate_wider_delim(SummStats, ";", names = c("Summ. 1", "Summ. 1 (%)","Summ. 2", "Summ. 2 (%)","Summ. 3", "Summ. 3 (%)"), too_few = "align_start")
 out %<>% separate_wider_delim(LineStats, ";", names = c("Line. 1", "Line. 1 (%)","Line. 2", "Line. 2 (%)","Line. 3", "Line. 3 (%)"), too_few = "align_start")
 
-write.xlsx(out,"J:\\virus_covid19\\ww_covid\\mixed_samples_summarized2.xlsx")
+write.xlsx(out,"K:\\projects\\alindsay\\Projects\\wwCOV\\results\\ncov-ww_upto_230728.xlsx")
 
