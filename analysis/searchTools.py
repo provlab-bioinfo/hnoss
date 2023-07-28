@@ -25,7 +25,7 @@ def mlocateFile(file, mLocateDB):
         return(None)   
 
 printFound = lambda nFiles, nFound, speed, end="\r": print("   Parsed {} files and found {} files ({}s)                 ".format(nFiles,nFound,speed),end=end)
-def generateFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile: str = None, maxFiles:int = 100000000, excludeDirs: list[str] = [], verbose: bool = True):
+def generateFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile: str = None, overwrite = False, maxFiles:int = 100000000, excludeDirs: list[str] = [], verbose: bool = True):
     """Finds all files that fit a regex in a specified folder
     :param dir: Directory to search
     :param regex: The regex to search by
@@ -42,6 +42,9 @@ def generateFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile
     if not os.path.exists(dir):
         raise Exception("Directory '" + dir + "' does not exist. Cannot generate database.")
 
+    if (overwrite == False and os.path.exists(outFile)):
+        return outFile
+
     if outFile is not None:
         out = open(outFile,'w')
 
@@ -52,7 +55,9 @@ def generateFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile
         if nFound >= maxFiles: break
         for file in files:
             nFiles += 1
-            match = file.endswith((fileExt)) if (regex is None) else re.match(regex, file)
+            match = True
+            if (fileExt is not None or regex is not None):
+                match = file.endswith((fileExt)) if (regex is None) else re.match(regex, file)            
             if match:
                 #if re.search(excludeDirs, root) != None: continue
                 path = str(root) + "/" + str(file)
@@ -79,28 +84,18 @@ def searchFlatFileDB(db: str = None, outFile: str = None, searchTerms: list[str]
     """
     if isinstance(db, str): db = set(open(db))
 
-    db = {file.strip() for file in db}
+    db = {str(file).strip() for file in db}
 
     if (verbose): print("Searching for files...")
-    nFound = nFiles = speed = 0
-    lastCheck = startTime = time.time()
-
-    # timer = time.time()
 
     # Remove by excludeTerms
     if (len(excludeTerms)):
         if (verbose): print("Checking exclude terms...")
         excludeAutomaton = generateSearchAutomaton(excludeTerms, caseSensitive = caseSensitive)
         out = copy.deepcopy(db)
-        for file in set(out): 
-            
+        for file in set(out):             
             if (next(excludeAutomaton.iter(file if caseSensitive else file.lower()),False)): 
                 db.discard(file)
-                #print("Discarded {}".format(file))
-
-    # print("Exclude: {}s".format(str(time.time()-timer)))
-
-    # timer = time.time()
 
     # Keep by searchTerms
     if (len(searchTerms)):
@@ -108,14 +103,10 @@ def searchFlatFileDB(db: str = None, outFile: str = None, searchTerms: list[str]
         automatons = [generateSearchAutomaton(term, caseSensitive = caseSensitive) for term in searchTerms]
         out = set()
         for file in set(db):
-            for automaton in automatons:
-                if (next(automaton.iter(file if caseSensitive else file.lower()),False)): 
-                    out.add(file)
+            f = f"^{file}$"
+            add = [next(automaton.iter(f if caseSensitive else f.lower()),False) for automaton in automatons]         
+            if all(add): out.add(file)
         db = copy.deepcopy(out)
-
-    # print("Search: {}s".format(str(time.time()-timer)))
-
-    # timer = time.time()
 
     # Keep by includeAutomaton
     if (len(includeTerms)):
@@ -123,11 +114,10 @@ def searchFlatFileDB(db: str = None, outFile: str = None, searchTerms: list[str]
         includeAutomaton = generateSearchAutomaton(includeTerms, caseSensitive = caseSensitive)
         out = set()
         for file in set(db):
-            if (next(includeAutomaton.iter(file if caseSensitive else file.lower()),False)): 
+            f = f"^{file}$"
+            if (next(includeAutomaton.iter(f if caseSensitive else f.lower()),False)): 
                 out.add(file)
         db = copy.deepcopy(out)
-
-    # print("Include: {}s".format(str(time.time()-timer)))
 
     db = list(db)
 
@@ -138,34 +128,15 @@ def searchFlatFileDB(db: str = None, outFile: str = None, searchTerms: list[str]
 
     return (db if outFile is None else outFile)
 
-    # for line in db:
-    #     nFiles += 1
-    #     lineCheck = line if (caseSensitive) else line.lower()
-    #     fnd = all(term in lineCheck for term in searchTerms) if len(searchTerms) else True
-    #     inc = any(term in lineCheck for term in includeTerms) if len(includeTerms) else True
-    #     exc = not any(term in lineCheck for term in excludeTerms) if len(excludeTerms) else True
-    #     if (fnd and inc and exc): 
-    #         if outFile is not None: 
-    #             out.write(line.strip() + "\n")
-    #         else: 
-    #             out.append(line.strip())
-    #         nFound += 1
-    #     if (nFiles % 1000 == 0): 
-    #         speed = str(round(1000/(time.time() - lastCheck)))
-    #         lastCheck = time.time()
-    #     if (verbose): printFound(nFiles,nFound,speed)
-    
-    # if (verbose): printFound(nFiles,nFound,str(round(time.time() - startTime,2)))
-    # return (out if outFile is None else outFile)
-
 def generateSearchAutomaton(searchTerms:list[str], file:str = None, caseSensitive = False):
     """Generates a search automaton for Aho-Corasick search
     :param searchTerms: A list of search terms
     :param file: An optional output file to pickle into
     :return: An automaton or the path to the pickle
-    """    
-    if (not caseSensitive):
-        searchTerms = [term.lower() for term in searchTerms]
+    """
+    if not isinstance(searchTerms, list): searchTerms = [searchTerms]
+    searchTerms = [str(term) for term in searchTerms]
+    if (not caseSensitive): searchTerms = [term.lower() for term in searchTerms]
     automaton = ahocorasick.Automaton()
     for term in searchTerms:
         automaton.add_word(term, term)
@@ -181,20 +152,18 @@ def generateSearchAutomaton(searchTerms:list[str], file:str = None, caseSensitiv
 def expandZipFlatFileDB(file: str):
     import zipfile, tempfile, shutil
 
-    tempFile = tempfile.TemporaryFile()
-
-    with open(file) as infile:
-        with open(tempFile,"w") as tempFile:
-            nLines = len(infile)
-            for line in infile:
+    with open(file,"r") as infile:
+        with tempfile.NamedTemporaryFile(mode="w", delete = False) as tempFile:
+            for line in infile.readlines():
                 zip = zipfile.ZipFile(str.strip(line))
                 names = zip.namelist()
                 tempFile.write(line)
                 [tempFile.write(str.strip(line) + "/" + name + "\n") for name in names]
 
             tempFile.close()
-            os.remove(infile)
-            shutil.move(tempFile, infile)
+            infile.close()
+            os.remove(file)
+            shutil.move(tempFile.name, file)
 
 def generateDirTree(dir: list[str], outFile:str = None, startIndex:int = 1):
     """ Generates an indexed representation of a directory tree
