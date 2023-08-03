@@ -1,5 +1,6 @@
 import time, os, re, pandas as pd, subprocess, tempfile, numpy as np
 import configSettings as cfg
+from pathlib import Path
 import searchTools as st
 from datetime import datetime, date
 from json import loads, dumps
@@ -88,20 +89,23 @@ def startFreyjaDashboard(freyja, metadata, output):
     #freyja dash [aggregated-filename-tsv] [sample-metadata.csv] [dashboard-title.txt] [introContent.txt] --output [outputname.html]
     subprocess.run(["freyja","dash",freyja,metadata,"--output",output])
 
+def convertToAggFormat(file):
+    """Converts single demix file to the aggregated format
+    :param file: The path to the file
+    :return: A demix file in aggregated format
+    """    
+    freyja = pd.read_csv(file, sep="\t", index_col = 0)
+    if len(freyja.columns) == 1: freyja = freyja.set_axis([Path(file).stem], axis=1).transpose()
+    return freyja
+
 def formatFreyjaLineage(file:list[str], summarized = False) -> pd.DataFrame:
     """Gets the lineage proportions from Frejya output files(s)
     :param file: The path to the Freyja output file(s)
     :return: A DataFrame with columns for lineages and abundances
-    """    
-    if (isinstance(file, list)): # For case of inputting individual files
-        freyja = [pd.read_csv(f, sep="\t", index_col = 0) for f in file]
-        freyja = [f.transpose() for f in freyja]
-        freyja = pd.concat(freyja)
-    else:
-        freyja = pd.read_csv(file, sep="\t", index_col = 0)
-        if (len(freyja.columns) == 1): # For a single file inputted
-            freyja = freyja.transpose()
-
+    """ 
+    file = file if type(file) is list else [file] 
+    freyja = [convertToAggFormat(f) for f in file]
+    freyja = pd.concat(freyja)
     freyja = freyja.rename_axis('file').reset_index()
 
     if (summarized):
@@ -114,9 +118,19 @@ def formatFreyjaLineage(file:list[str], summarized = False) -> pd.DataFrame:
         freyja = freyja.explode([cfg.lineageCol,cfg.abundCol]).reset_index(drop=True)
 
     freyja = freyja.drop(columns=[cfg.summarizedCol])
-    freyja[cfg.abundCol] = freyja[cfg.abundCol].transform(lambda x: float(sigfig(100*float(x))))
+    for col in [cfg.abundCol,cfg.residualCol,cfg.coverageCol]:
+        freyja[col] = freyja[col].transform(lambda x: float(sigfig(float(x))))
     freyja = freyja.groupby([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol])[cfg.abundCol].first().unstack() 
     return(freyja)
+
+def filterFreyjaLineage(freyja: pd.DataFrame, cutoff: float = 0.05):
+    """Filters out low presence lineages
+    :param freyja: A formatted Freyja lineage from formatFreyjaLineage() 
+    :param cutoff: The cut-off value to exclude
+    :return: Freyja lineages with value below cutoff replaced with NaN
+    """    
+    freyja = freyja.mask(freyja < cutoff, np.nan).dropna(axis = 1, how='all')
+    return freyja
 
 def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
     """ Collapses Freyja lineages. Cannot parse down past "A","B" or any recombinant strains
