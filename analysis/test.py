@@ -1,32 +1,29 @@
+#%%
+
 import time, os, re, pandas as pd, subprocess, tempfile
 from datetime import datetime
-import functions as fn
+import functions as fn, searchTools as st
+import configSettings as cfg
+from json import loads, dumps
 
 os.chdir(os.path.dirname(__file__))
 
-#file = "/nfs/Genomics_DEV/projects/alindsay/Projects/wwCOV/data/GP-230403_S15_L001_R2_001.tsv"
-file = "../data/results_PRL_agg.tsv"
+freyja = "/nfs/Genomics_DEV/projects/alindsay/Projects/wwCOV/data/ncov-ww_upto_230728.tsv"
+freyja1 = fn.formatFreyjaLineage(freyja).reset_index(['resid','coverage'])
+freyja2 = fn.formatFreyjaLineage(freyja,summarized=True).reset_index(['resid','coverage'])
 
-freyja = fn.formatFreyjaLineage(file)
+print(freyja1)
+print(freyja2)
 
-# print(list(freyja.columns.values.tolist()))
+freyja = freyja1.merge(freyja2,how="outer",on="file")
 
-# print(freyja)
+print(freyja)
 
-print(fn.collapseFreyjaLineage(freyja,['B.1.1','BA.5.2.18']))
-
-# strain = "XBB"
-
-# aliasor = Aliasor()
-# print("strain: " + strain)
-# print("parent: " + aliasor.parent(strain))
-# print("uncompress: " + aliasor.uncompress(strain))
-# print("compress: " + aliasor.compress(strain))
-# print("partial compress: " + aliasor.partial_compress(strain,up_to=50,accepted_aliases=["B","A"]))
+freyja.to_csv("../results/ncov-ww_upto_230728.csv")
 
 
-# print(freyja)
 
-# print(list(freyja.columns.values.tolist()))
-# freyja.to_csv("../results/test.tsv",sep="\t")
 
+
+
+# %%

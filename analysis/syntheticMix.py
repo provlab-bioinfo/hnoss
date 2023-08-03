@@ -2,7 +2,7 @@ import functions as fn
 import configSettings as cfg
 import pandas as pd, tempfile, subprocess
 
-def getSyntheticList(BAMs:pd.DataFrame, n:int = 100) ->  pd.DataFrame:
+def sampleSyntheticList(BAMs:pd.DataFrame, n:int = 100) ->  pd.DataFrame:
     """Creates a random sample of COVID BAM entries
     :param BAMs: The dataframe containing the BAM information. Contains columns 'Key', 'BAMpath', 'current_lineage'
     :param n: the number of BAM files to randomly select, defaults to 100

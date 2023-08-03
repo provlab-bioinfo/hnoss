@@ -1,4 +1,6 @@
-from analysis.functions import *
+import os
+import functions as fn
+import syntheticMix as syn
 
 os.chdir(os.path.dirname(__file__))
 seqPath = "/nfs/APL_Genomics/virus_covid19/routine_seq/2023_01_Runs"
@@ -14,13 +16,22 @@ synPropOut = "./results/synProp.tsv"
 frejyaOut = "./results/freyja.tsv"
 compareOut = "./results/results.tsv"
 
-BAMs = getBAMdb(seqPath = seqPath, metadata = metadata, BAMdb = BAMdb, BAMfiles = BAMfiles)
-synList = getSyntheticList(BAMs, n=10)
-synProp = getSyntheticLineageProportions(synList)
-synReads = generateSyntheticReads(BAMs = synList, outFile = synBAMs, depth = 10)
-frejya = runFrejya(BAMfile = synBAMs, variantOut = variantsOut, depthsOut = depthsOut, ref = ref, outFile = frejyaOut)
+nMixes = 10
+samplesPerMix = 10
+depth = 10
+out = "./results/testsyn"
 
-#synProp = pd.read_csv(synPropOut, sep="\t")  
-results = compareFreyja(frejyaOut, synProp)
-print(results)
-results.to_csv(compareOut, sep="\t", index = False)
+def createMix(BAMs: list[str], id: int, out:str, depth:int):
+    outFile = os.path.join(out,i,".bam")    
+    synProp = syn.getSyntheticLineageProportions(BAMs)
+    synReads = syn.generateSyntheticReads(BAMs = BAMs, outFile = synBAMs, depth = depth)
+    frejya = fn.runFrejya(BAMfile = synBAMs, variantOut = variantsOut, depthsOut = depthsOut, ref = ref, outFile = frejyaOut)
+    os.remove(synReads)
+    results = syn.compareSyntheticMix(frejya, synProp)
+    return(results)
+
+BAMs = fn.getBAMdb(seqPath = seqPath, metadata = metadata, BAMdb = BAMdb, BAMfiles = BAMfiles)
+results = [createMix(BAMs, id, out, depth) for id in range(1,nMixes)]
+
+
+
