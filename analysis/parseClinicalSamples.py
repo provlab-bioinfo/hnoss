@@ -8,28 +8,26 @@ from json import loads, dumps
 
 os.chdir(os.path.dirname(__file__))
 
-# freyjaDir = "/nfs/Genomics_DEV/projects/alindsay/Projects/wwCOV/data/linnet"
-# freyjaDir = [os.path.join(freyjaDir, file) for file in os.listdir(freyjaDir)][0:20]
-allData = pd.read_csv("/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/data/BN_covid_db_export_20230627.csv", encoding_errors="ignore")#"/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/results/alldata_all.csv")
-freyja_sum = pd.read_csv("/nfs/Genomics_DEV/projects/alindsay/Projects/wwCOV/results/clinical_summarized.csv", encoding_errors="ignore")
-freyja_line = pd.read_csv("/nfs/Genomics_DEV/projects/alindsay/Projects/wwCOV/results/clinical_lineages.csv", encoding_errors="ignore")
-freyja = freyja_sum.merge(freyja_line,how="outer",on="file")
-freyja["Key"] = freyja["file"].transform(lambda x: x.replace("_variants.tsv","").split(".")[0])
+# allData = pd.read_csv("/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/data/BN_covid_db_export_20230627.csv", encoding_errors="ignore")#"/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/results/alldata_all.csv")
+# freyja_sum = pd.read_csv("/nfs/Genomics_DEV/projects/alindsay/Projects/wwCOV/results/clinical_summarized.csv", encoding_errors="ignore")
+# freyja_line = pd.read_csv("/nfs/Genomics_DEV/projects/alindsay/Projects/wwCOV/results/clinical_lineages.csv", encoding_errors="ignore")
+# freyja = freyja_sum.merge(freyja_line,how="outer",on="file")
+# freyja["Key"] = freyja["file"].transform(lambda x: x.replace("_variants.tsv","").split(".")[0])
 
-print(freyja)
-print(allData)
+# print(freyja)
+# print(allData)
 
-freyja = freyja.merge(allData,how="left",on="Key")
+# freyja = freyja.merge(allData,how="left",on="Key")
 
-freyja.to_csv("../results/mixed_samples_big_BN.csv")
+# freyja.to_csv("../results/mixed_samples_big_BN.csv")
 
 freyja = pd.read_csv("../results/mixed_samples_big_BN.csv")
 
-files = st.searchFlatFileDB("/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/230713_fastas.txt", includeTerms=freyja['fasta'].values.tolist(), excludeTerms=['work'])
 fastas = pd.DataFrame()
-fastas['fastaPath'] = files
+fastas['fastaPath'] = st.searchFlatFileDB("/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/230713_fastas.txt", includeTerms=freyja['fasta'].values.tolist(), excludeTerms=['work','preconsensus'])
 fastas['Key'] = fastas['fastaPath'].transform(lambda path: os.path.basename(path).rsplit('.')[0])
-fastas = fastas.groupby('Key').first().reset_index()
+weights = fastas['fastaPath'].transform(lambda path: 99.999 if bool(re.search('consensus', path)) else 0.001)
+fastas = fastas.groupby('Key').sample(weights = weights.tolist()).reset_index()
 
 # fastas.to_csv("../results/mixed_samples_fastas.csv")
 
