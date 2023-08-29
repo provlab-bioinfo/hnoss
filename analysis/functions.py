@@ -7,7 +7,7 @@ from json import loads, dumps
 from ast import literal_eval
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
-from scipy.stats import ttest_rel
+from scipy.stats import ttest_rel, pearsonr, spearmanr
 
 from pango_aliasor.aliasor import Aliasor
 
@@ -226,6 +226,17 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
     freyja1, freyja2 = normalizeStrains(freyja1,freyja2)
     freyja1, freyja2 = normalizeSamples(freyja1,freyja2)
 
+    df = pd.DataFrame(data={'x': freyja1.fillna(0).to_numpy().flatten(),
+                       'y': freyja2.fillna(0).to_numpy().flatten()})
+
+    df = df[df.sum(axis=1) > 0]
+    # df = df.sort_values(by=['x'])
+
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None): print(df)
+
+    # x =  df["x"].values.tolist()
+    # y =  df["y"].values.tolist()
+
     x = freyja1.fillna(0).to_numpy().flatten()
     y = freyja2.fillna(0).to_numpy().flatten()
 
@@ -237,7 +248,9 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
     x = x[sort]
     y = y[sort]
 
-    print(ttest_rel(x,y))
+    # print(ttest_rel(x,y))
+    corr, pval = pearsonr(x, y)
+    print(f'Pearsons correlation: {corr} (P-value: {pval})')
 
     if (type == "scatter"):        
 
@@ -256,7 +269,7 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
         #     # plt.yscale('log')
         #     # plt.xscale('log')
         # else:
-        plt.plot([0,50,100],[0,50,100])
+        plt.plot([0,0.5,1],[0,.5,1])
         plt.scatter(x, y, s=5, alpha=0.5)
         a, b = np.polyfit(x, y, 1)
         plt.plot(x, a*x+b)
@@ -269,9 +282,6 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
     elif (type == "tukey"):
         f, ax = plt.subplots(1, figsize = (8,5))
         sm.graphics.mean_diff_plot(x, y, ax = ax)
-
-        #display Bland-Altman plot
-        plt.show()
 
     if outFile is None:
         plt.show()
