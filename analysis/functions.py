@@ -98,14 +98,14 @@ def convertToAggregatedFormat(file):
     if len(freyja.columns) == 1: freyja = freyja.set_axis([Path(file).stem], axis=1).transpose()
     return freyja
 
-def aggregateFreyjaLineages(files:list[str], summarized = False) -> pd.DataFrame:
+def readFreyjaLineages(files:list[str], summarized = False) -> pd.DataFrame:
     """Aggregated Freyja lineage files into a single dataframe. Will concatenate both files created with `$freyja demix` or `$freyja aggregate`.
     :param files: The files to concatenate
     :param summarized: Use the summarized strains?, defaults to False
     :return: A dataframe with the same format as `$freyja aggregate`
     """    
-    file = file if type(file) is list else [file] 
-    freyja = [convertToAggregatedFormat(f) for f in file]
+    files = files if type(files) is list else [files] 
+    freyja = [convertToAggregatedFormat(f) for f in files]
     freyja = pd.concat(freyja)
     freyja = freyja.rename_axis('file').reset_index()
 
@@ -120,12 +120,13 @@ def aggregateFreyjaLineages(files:list[str], summarized = False) -> pd.DataFrame
 
     return freyja
 
-def formatFreyjaLineage(file:list[str], summarized = False) -> pd.DataFrame:
+
+def formatFreyjaLineage(files:list[str], summarized = False) -> pd.DataFrame:
     """Gets the lineage proportions from Frejya output files(s)
     :param file: The path to the Freyja output file(s)
     :return: A DataFrame with columns for lineages and abundances
     """ 
-    freyja = aggregateFreyjaLineages(file = file, summarized = summarized)
+    freyja = readFreyjaLineages(files = files, summarized = summarized)
 
     freyja = freyja.drop(columns=[cfg.summarizedCol])
     for col in [cfg.abundCol,cfg.residualCol,cfg.coverageCol]:
@@ -297,6 +298,26 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
         plt.show()
     else:
         plt.savefig(outFile)
+#endregion
+
+#region: Variants
+
+def readFreyjaVariants(files: list[str]):
+    variants = pd.concat([pd.read_csv(fp, sep="\t", index_col = None).assign(file=os.path.basename(fp)) for fp in files])
+    names = variants.pop('file')
+    variants.insert(0, 'file', names)
+    return (variants)
+
+def findVariants(variants: pd.DataFrame, mutations: pd.DataFrame) -> pd.DataFrame:
+
+    cols = ['POS', 'REF', 'ALT']       
+    if not pd.Series(cols).isin(variants.columns).all(): raise TypeError(f"Cols '{', '.join(cols)}' not all present in variants input file")
+    if not pd.Series(cols).isin(mutations.columns).all(): raise TypeError(f"Cols '{', '.join(cols)}' not all present in mutations input file")
+
+    found = mutations.merge(variants, on=['POS', 'REF', 'ALT'])
+    found = found[variants.columns]
+    return (found)
+
 #endregion
 
 #region: plotting
