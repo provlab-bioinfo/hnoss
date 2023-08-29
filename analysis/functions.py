@@ -89,7 +89,7 @@ def startFreyjaDashboard(freyja, metadata, output):
     #freyja dash [aggregated-filename-tsv] [sample-metadata.csv] [dashboard-title.txt] [introContent.txt] --output [outputname.html]
     subprocess.run(["freyja","dash",freyja,metadata,"--output",output])
 
-def convertToAggFormat(file):
+def convertToAggregatedFormat(file):
     """Converts single demix file to the aggregated format
     :param file: The path to the file
     :return: A demix file in aggregated format
@@ -98,13 +98,14 @@ def convertToAggFormat(file):
     if len(freyja.columns) == 1: freyja = freyja.set_axis([Path(file).stem], axis=1).transpose()
     return freyja
 
-def formatFreyjaLineage(file:list[str], summarized = False) -> pd.DataFrame:
-    """Gets the lineage proportions from Frejya output files(s)
-    :param file: The path to the Freyja output file(s)
-    :return: A DataFrame with columns for lineages and abundances
-    """ 
+def aggregateFreyjaLineages(files:list[str], summarized = False) -> pd.DataFrame:
+    """Aggregated Freyja lineage files into a single dataframe. Will concatenate both files created with `$freyja demix` or `$freyja aggregate`.
+    :param files: The files to concatenate
+    :param summarized: Use the summarized strains?, defaults to False
+    :return: A dataframe with the same format as `$freyja aggregate`
+    """    
     file = file if type(file) is list else [file] 
-    freyja = [convertToAggFormat(f) for f in file]
+    freyja = [convertToAggregatedFormat(f) for f in file]
     freyja = pd.concat(freyja)
     freyja = freyja.rename_axis('file').reset_index()
 
@@ -116,6 +117,15 @@ def formatFreyjaLineage(file:list[str], summarized = False) -> pd.DataFrame:
         freyja[cfg.lineageCol] = freyja[cfg.lineageCol].str.split(" ")
         freyja[cfg.abundCol] = freyja[cfg.abundCol].str.split(" ")
         freyja = freyja.explode([cfg.lineageCol,cfg.abundCol]).reset_index(drop=True)
+
+    return freyja
+
+def formatFreyjaLineage(file:list[str], summarized = False) -> pd.DataFrame:
+    """Gets the lineage proportions from Frejya output files(s)
+    :param file: The path to the Freyja output file(s)
+    :return: A DataFrame with columns for lineages and abundances
+    """ 
+    freyja = aggregateFreyjaLineages(file = file, summarized = summarized)
 
     freyja = freyja.drop(columns=[cfg.summarizedCol])
     for col in [cfg.abundCol,cfg.residualCol,cfg.coverageCol]:
