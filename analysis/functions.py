@@ -120,7 +120,6 @@ def readFreyjaLineages(files:list[str], summarized = False) -> pd.DataFrame:
 
     return freyja
 
-
 def formatFreyjaLineage(files:list[str], summarized = False) -> pd.DataFrame:
     """Gets the lineage proportions from Frejya output files(s)
     :param file: The path to the Freyja output file(s)
@@ -134,13 +133,15 @@ def formatFreyjaLineage(files:list[str], summarized = False) -> pd.DataFrame:
     freyja = freyja.groupby([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol])[cfg.abundCol].first().unstack() 
     return(freyja)
 
-def filterFreyjaLineage(freyja: pd.DataFrame, cutoff: float = 0.05):
+def filterFreyjaLineage(freyja: pd.DataFrame, cutoff: float = 0.05, removeEmpty = True):
     """Filters out low presence lineages
     :param freyja: A formatted Freyja lineage from formatFreyjaLineage() 
     :param cutoff: The cut-off value to exclude
     :return: Freyja lineages with value below cutoff replaced with NaN
     """    
-    freyja = freyja.mask(freyja < cutoff, np.nan).dropna(axis = 1, how='all')
+    freyja = freyja.mask(freyja < cutoff, np.nan)
+    if removeEmpty:
+        freyja = freyja.dropna(axis = 1, how='all')
     return freyja
 
 def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
@@ -232,6 +233,24 @@ def normalizeSamples(freyja1: pd.DataFrame, freyja2:pd.DataFrame) -> list[pd.Dat
     freyja1 = freyja1.reindex(index=indexes)
     freyja2 = freyja2.reindex(index=indexes)
     return freyja1, freyja2
+
+def normalizeValues(freyja: pd.DataFrame, max:int = 1) -> pd.DataFrame:
+    """Normalizes values for wastewater strains
+    :param freyja: A Freyja dataframe
+    :param max: The upper bound of the range for normalization [0,max], defaults to 0
+    :return: A normalized dataframe
+    """    
+    freyja = freyja.div(freyja.sum(axis=1), axis=0)
+    return(freyja.applymap(sigfig)*max)
+
+def codeMissingAsOther(freyja: pd.DataFrame, target:int = 1, colName:str = "Other") -> pd.DataFrame:
+    """Adds a column for the missing strain proportion of each sample 
+    :param freyja: A Freyja dataframe
+    :param colName: The column name, defaults to "Other"
+    :return: A dataframe with a column named 'colName'
+    """    
+    freyja[colName] = target-freyja.sum(axis=1)
+    return (freyja)
 
 def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, log = False):
     freyja1, freyja2 = normalizeStrains(freyja1,freyja2)
