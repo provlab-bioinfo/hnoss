@@ -27,10 +27,11 @@ def generateAHoutput(freyjaFiles, IDs, output):
     freyja = freyja.drop(["Found"], axis=1, errors="ignore")
     # freyja = freyja.iloc[:, : 10]
 
-    # Drop < 85% coverage
+    # Drop < 85% coverage and missing accessions
     lowCoverage = freyja[freyja.coverage < 85]["SiteID"].values.tolist()
     print(f"Strains dropped due to < 85% coverage ({len(lowCoverage)}): {', '.join(lowCoverage)}")
     freyja = freyja[freyja.coverage >= 85]
+    freyja = freyja.dropna(subset=["Accession"])    
 
     # Add collection and reporting dates
     freyja["CollectionDate"] = freyja['SiteID'].apply(lambda x: datetime.strptime(x[3:9], '%y%m%d').date())
