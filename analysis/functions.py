@@ -94,7 +94,7 @@ def convertToAggregatedFormat(file):
     :param file: The path to the file
     :return: A demix file in aggregated format
     """    
-    freyja = pd.read_csv(file, sep="\t", index_col = 0)
+    freyja = st.importToDataFrame(file, index_col = 0)
     if len(freyja.columns) == 1: freyja = freyja.set_axis([Path(file).stem], axis=1).transpose()
     return freyja
 
@@ -282,32 +282,23 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
     corr, pval = pearsonr(x, y)
     print(f'Pearsons correlation: {corr} (P-value: {pval})')
 
-    if (type == "scatter"):        
-
-        # if (log):
-
-        #     # logx = [n*np.log(n) if n>=1 else 1 for n in x]
-        #     # logy = [n*np.log(n) if n>=1 else 1 for n in y]
-
-        #     # coefficients = np.polyfit(logx, logy, 1)
-        #     # polynomial = np.poly1d(coefficients)
-        #     # log_y_fit = polynomial(logx)  # <-- Changed
-
-        #     # plt.plot([0,50,100],[0,50,100])
-        #     # plt.scatter(x, y, s=5, alpha=0.5)
-        #     # plt.plot(x, 10**log_y_fit)     # <-- Changed
-        #     # plt.yscale('log')
-        #     # plt.xscale('log')
-        # else:
-        plt.plot([0,0.5,1],[0,.5,1])
-        plt.scatter(x, y, s=5, alpha=0.5)
-        a, b = np.polyfit(x, y, 1)
-        plt.plot(x, a*x+b)
+    if (type == "scatter"):   
+        max = x+y
+        plt.plot([0,25,50],[0,25,50])     
+        if (log):            
+            plt.scatter(x, y, s=5, alpha=0.5)
+            z = np.polyfit(x, np.log10(y), 1)
+            p = np.poly1d(z)
+            plt.xscale("log")
+            plt.yscale("log")
+            plt.plot(x, 10**p(x), "r--")
+        else:
+            plt.scatter(x, y, s=5, alpha=0.5)
+            a, b = np.polyfit(x, y, 1)
+            plt.plot(x, a*x+b)
 
         plt.xlabel(xlab)
         plt.ylabel(ylab)
-
-
 
     elif (type == "tukey"):
         f, ax = plt.subplots(1, figsize = (8,5))
