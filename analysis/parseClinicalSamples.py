@@ -26,7 +26,7 @@ freyja = pd.read_csv("../results/mixed_samples_big_BN.csv")
 fastas = pd.DataFrame()
 fastas['fastaPath'] = st.searchFlatFileDB("/nfs/Genomics_DEV/projects/nextstrain/EBS-parser/230713_fastas.txt", includeTerms=freyja['fasta'].values.tolist(), excludeTerms=['work','preconsensus'])
 fastas['Key'] = fastas['fastaPath'].transform(lambda path: os.path.basename(path).rsplit('.')[0])
-weights = fastas['fastaPath'].transform(lambda path: 99.999 if bool(re.search('consensus', path)) else 0.001)
+weights = fastas['fastaPath'].transform(lambda path: 1000000000 if bool(re.search('consensus', path)) else 1)
 fastas = fastas.groupby('Key').sample(weights = weights.tolist()).reset_index()
 
 # fastas.to_csv("../results/mixed_samples_fastas.csv")

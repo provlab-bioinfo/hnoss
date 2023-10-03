@@ -1,4 +1,4 @@
-import pandas as pd, os, re, time, ahocorasick, pickle, numpy as np, glob, random, itertools, copy
+import pandas as pd, os, re, time, ahocorasick, pickle, numpy as np, glob, random, itertools, copy, pathlib
 
 def findFile(regex):
     """Simple finder for a single file
@@ -42,11 +42,11 @@ def generateFlatFileDB(dir: str, regex: str = None, fileExt: str = None, outFile
     if not os.path.exists(dir):
         raise Exception("Directory '" + dir + "' does not exist. Cannot generate database.")
 
-    if (overwrite == False and os.path.exists(outFile)):
-        return outFile
-
     if outFile is not None:
-        out = open(outFile,'w')
+        if (overwrite == False and  os.path.exists(outFile)):
+            return outFile
+        else:
+            out = open(outFile,'w')
 
     if (verbose): print("Populating database...")
 
@@ -403,3 +403,23 @@ def sortDigitSuffix(data):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
     alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
     return sorted(data, key=alphanum_key)
+
+def importToDataFrame(filename, **kargs):
+    """Generic importer to Pandas dataframes. Supports .csv, .tsv., .xlsx
+    :param filename: The path to the file to import
+    :param **kargs: Additional arguments to the Pandas read function
+    :return: _description_
+    """    
+    fileExt = pathlib.Path(filename).suffix
+    df = pd.DataFrame()
+    match fileExt:
+        case ".tsv":
+            df = pd.read_csv(filename, sep="\t", **kargs)
+        case ".csv":
+            df = pd.read_csv(filename, **kargs)
+        case ".xlsx":
+            df = pd.read_excel(filename, **kargs)
+        case _:
+            df = filename
+    
+    return df

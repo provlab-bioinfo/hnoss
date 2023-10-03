@@ -64,5 +64,5 @@ def generateAHoutput(freyjaFiles, IDs, output):
 
 ID_list = "/nfs/APL_Genomics/apps/development/ncov-wastewater/cumulative_ww_out.xlsx"
 freyja = st.generateFlatFileDB("/nfs/APL_Genomics/apps/development/ncov-wastewater/freyja_agg_output/")
-output = os.path.join("/nfs/APL_Genomics/apps/development/ncov-wastewater/", str(date.today().strftime("%Y%m%d")) + "_ww_out_test.csv")
+output = os.path.join("/nfs/APL_Genomics/apps/development/ncov-wastewater/", str(date.today().strftime("%Y%m%d")) + "_ww_out.csv")
 generateAHoutput(freyjaFiles = freyja, IDs = ID_list, output = output)
