@@ -243,6 +243,11 @@ def normalizeValues(freyja: pd.DataFrame, max:int = 1) -> pd.DataFrame:
     freyja = freyja.div(freyja.sum(axis=1), axis=0)
     return(freyja.applymap(sigfig)*max)
 
+def unaliasCols(freyja: pd.DataFrame):
+    aliasor = Aliasor()
+    freyja.columns = [aliasor.uncompress(col) for col in freyja.columns.to_list()]
+    return freyja
+
 def codeMissingAsOther(freyja: pd.DataFrame, target:int = 1, colName:str = "Other") -> pd.DataFrame:
     """Adds a column for the missing strain proportion of each sample 
     :param freyja: A Freyja dataframe
@@ -256,19 +261,16 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
     freyja1, freyja2 = normalizeStrains(freyja1,freyja2)
     freyja1, freyja2 = normalizeSamples(freyja1,freyja2)
 
-    df = pd.DataFrame(data={'x': freyja1.fillna(0).to_numpy().flatten(),
-                       'y': freyja2.fillna(0).to_numpy().flatten()})
+    cols = list(set(freyja1.columns.to_list()) | set(freyja2.columns.to_list()))
+    freyja1 = freyja1.reset_index().melt(id_vars = "file", value_vars = cols, var_name = "lineage", value_name='run1')
+    freyja2 = freyja2.reset_index().melt(id_vars = "file", value_vars = cols, var_name = "lineage", value_name='run2')
+    freyja = freyja1.merge(freyja2, on=['file','lineage'])
 
-    df = df[df.sum(axis=1) > 0]
-    # df = df.sort_values(by=['x'])
-
-    # with pd.option_context('display.max_rows', None, 'display.max_columns', None): print(df)
-
-    # x =  df["x"].values.tolist()
-    # y =  df["y"].values.tolist()
-
-    x = freyja1.fillna(0).to_numpy().flatten()
-    y = freyja2.fillna(0).to_numpy().flatten()
+    freyja = freyja[freyja[['run1','run2']].sum(axis=1) > 0].fillna(0)
+    freyja = freyja.sort_values(by=['file','lineage'])
+   
+    x = freyja['run1'].to_numpy().flatten()
+    y = freyja['run2'].to_numpy().flatten()
 
     idx = np.isfinite(x) & np.isfinite(y) & np.where(np.add(x,y) != 0,True,False)
 
@@ -308,6 +310,8 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
         plt.show()
     else:
         plt.savefig(outFile)
+
+    return freyja
 #endregion
 
 #region: Variants
@@ -318,8 +322,12 @@ def readFreyjaVariants(files: list[str]):
     variants.insert(0, 'file', names)
     return (variants)
 
-def findVariants(variants: pd.DataFrame, mutations: pd.DataFrame) -> pd.DataFrame:
-
+def findMutations(variants: pd.DataFrame, mutations: pd.DataFrame) -> pd.DataFrame:
+    """Finds mutations in a Freyja variants file
+    :param variants: Variants data from readFreyjaVariants()
+    :param mutations: A dataframe of target mutations. Must have columns 'POS', 'REF', 'ALT'.
+    :return: A subset of the variants dataframe containing only the specified mutations
+    """    
     cols = ['POS', 'REF', 'ALT']       
     if not pd.Series(cols).isin(variants.columns).all(): raise TypeError(f"Cols '{', '.join(cols)}' not all present in variants input file")
     if not pd.Series(cols).isin(mutations.columns).all(): raise TypeError(f"Cols '{', '.join(cols)}' not all present in mutations input file")
@@ -327,6 +335,26 @@ def findVariants(variants: pd.DataFrame, mutations: pd.DataFrame) -> pd.DataFram
     found = mutations.merge(variants, on=['POS', 'REF', 'ALT'])
     found = found[variants.columns]
     return (found)
+
+#endregion
+
+#region: internal functions
+def addIDs(freyja: pd.DataFrame, IDs: str) -> pd.DataFrame:
+    IDs = pd.read_csv(IDs, sep="\t", index_col = None)
+    
+
+
+
+
+
+    IDs['Key'].assign(subkey = lambda key: x.temp_c * 9 / 5 + 32)
+
+
+
+
+
+
+
 
 #endregion
 
@@ -382,7 +410,7 @@ def sigfig(val, n:int = 3):
     :return: The truncated float
     """    
     # if (n == 0): return round(val)
-    return '{0:.{1}f}'.format(float(val),n)
+    return float('{0:.{1}f}'.format(float(val),n))
 
 def dateToFractionalWeek(isoDate):
     """Converts a date to a week number
