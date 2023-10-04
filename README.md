@@ -1,58 +1,126 @@
 
-<!-- README.md is generated from README.Rmd. Please edit that file -->
-
-# wwCOV
-
-<!-- badges: start -->
-
+# Hnoss
 [![Lifecycle:
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-<!-- badges: end -->
 
-The goal of wwCOV is to …
+## Introduction
 
-## Installation
+Hnoss is an extension of the Freyja<sup>[1](#references)</sup> SARS-CoV-2 strain deconvolution package<sup>[2](#references)</sup> to allow for easier manipulation and more flexibility. 
 
-You can install the development version of dashboard from
-[GitHub](https://github.com/) with:
+## Table of Contents
 
-``` r
-# install.packages("devtools")
-devtools::install_github("provlab-bioinfo/wwCOV")
+- [Introduction](#introduction)
+- [Quick-Start Guide](#quick-start%guide)
+- [Dependencies](#dependencies)
+- [Installation](#installation)
+- [Input](#input)
+- [Output](#output)
+- [Workflow](#workflow)
+- [References](#references)
+
+## Quick-Start Guide
+
+Import into your script:
+```
+conda activate hnoss-env
+import hnoss
+```
+For details on available arguments, enter:
+```
+hnoss --help
 ```
 
-## Example
+## Dependencies
 
-This is a basic example which shows you how to solve a common problem:
-
-``` r
-library(wwCOV)
-## basic example code
+[Conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html) is required to build an environment with required workflow dependencies. To create the environment
+```
+conda create -n hnoss-env
+```
+then add the following channels
+```
+conda config --add channels defaults
+conda config --add channels bioconda
+conda config --add channels conda-forge
+```
+and then install hnoss
+```
+conda install hnoss
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`?
-You can include R chunks like so:
+See REQUIREMENTS.txt for package dependancies.
 
-``` r
-summary(cars)
-#>      speed           dist       
-#>  Min.   : 4.0   Min.   :  2.00  
-#>  1st Qu.:12.0   1st Qu.: 26.00  
-#>  Median :15.0   Median : 36.00  
-#>  Mean   :15.4   Mean   : 42.98  
-#>  3rd Qu.:19.0   3rd Qu.: 56.00  
-#>  Max.   :25.0   Max.   :120.00
-```
+## Input
+This tool runs after Freyja via a flexible import functions. For strain deconvolution, it allows any combination of output files from ```freyja demix``` and ```freyja aggregate```. Please refer to the [Freyja documentation](https://github.com/andersen-lab/Freyja).
 
-You’ll still need to render `README.Rmd` regularly, to keep `README.md`
-up-to-date. `devtools::build_readme()` is handy for this. You could also
-use GitHub Actions to re-render `README.Rmd` every time you push. An
-example workflow can be found here:
-<https://github.com/r-lib/actions/tree/v1/examples>.
+## Output
+#### <ins>Typical Hnoss structure:</ins>
 
-You can also embed plots, for example:
+<table>
+<thead>
+  <tr>
+    <th colspan="3">SampleInfo</th>
+    <th colspan="4"  bgcolor="gray"><font color="black">SummarizedLineages</font></th>
+    <th colspan="4">RawLineages</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <th>file</th>
+    <th>resid</th>
+    <th>coverage</th>
+    <th bgcolor="gray"><font color="black">Alpha</font></th>
+    <th bgcolor="gray"><font color="black">Beta</font></th>
+    <th bgcolor="gray"><font color="black">XBB* (XBB.X)</font></th>
+    <th bgcolor="gray"><font color="black">...</font></th>
+    <th>A.1</th>
+    <th>BA.2.1</th>
+    <th>XBB.1.11</th>
+    <th>...</th>
+  </tr>
+  <tr>
+    <td>230101_1_S1_L001.variants.tsv</td>
+    <td>8.28</td>
+    <td>98.475</td>
+    <td bgcolor="gray"><font color="black">0.121</font></td>
+    <td bgcolor="gray"><font color="black">0.312</font></td>
+    <td bgcolor="gray"><font color="black">0.426</font></td>
+    <td bgcolor="gray"><font color="black">...</font></td>
+    <td>NA</td>
+    <td>0.061</td>
+    <td>0.678</td>
+    <td>...</td>
+  </tr>
+  <tr>
+    <td>230101_2_S2_L001.variants.tsv</td>
+    <td>9.42</td>
+    <td>99.234</td>
+    <td bgcolor="gray"><font color="black">0.015</font></td>
+    <td bgcolor="gray"><font color="black">0.168</font></td>
+    <td bgcolor="gray"><font color="black">0.767</font></td>
+    <td bgcolor="gray"><font color="black">...</font></td>
+    <td>0.002</td>
+    <td>0.007</td>
+    <td>0.362</td>
+    <td>...</td>
+  </tr>
+  <tr>
+    <td>...</td>
+    <td>...</td>
+    <td>...</td>
+    <td bgcolor= "gray"><font color="black">...</font></td>
+    <td bgcolor= "gray"><font color="black">...</font></td>
+    <td bgcolor= "gray"><font color="black">...</font></td>
+    <td bgcolor= "gray"><font color="black">...</font></td>
+    <td>...</td>
+    <td>...</td>
+    <td>...</td>
+    <td>...</td>
+  </tr>
+</tbody>
+</table>
 
-<img src="man/figures/README-pressure-1.png" width="100%" />
+## References
 
-In that case, don’t forget to commit and push the resulting figure
-files, so they display on GitHub and CRAN.
+1. Karthikeyan, Smruthi, et al. "Wastewater sequencing uncovers early, cryptic SARS-CoV-2 variant transmission (preprint)." (2021).
+
+2. Andersen-Lab Andersen-Lab/Freyja: Depth-weighted De-Mixing https://github.com/andersen-lab/Freyja (accessed Oct 4, 2023). 
