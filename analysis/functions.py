@@ -1,49 +1,13 @@
-import time, os, re, pandas as pd, subprocess, tempfile, numpy as np
+import os, pandas as pd, subprocess, numpy as np
 import configSettings as cfg
 from pathlib import Path
-import searchTools as st
 from datetime import datetime, date
 from json import loads, dumps
 from ast import literal_eval
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
-from scipy.stats import ttest_rel, pearsonr, spearmanr
-
+from scipy.stats import pearsonr
 from pango_aliasor.aliasor import Aliasor
-
-#region: database
-def getBAMdb(seqPath: str, BAMdb, BAMdata, metadata: str = None) -> pd.DataFrame:
-    """Generates list of BAM files for a specific folder.
-    Uses regular expressions for the expected BAM output files from Nanopore and Illumina sequencing
-    :param seqPath: The path to the folder containing BAM files
-    :param metadata: The path to the CSV containing patient metadata
-    :param BAMdb: The path to the output database. Will generate it if the file is not present.
-    :param BAMfiles: The path to output the collated BAM file and patient metadata. Will generate it if the file is not present.
-    :return: A dataframe containing 'Key', 'BAMpath', 'current_lineage'
-    """    
-    nanoBamRE = ".primertrimmed.rg.sorted.bam"
-    illBamRE = ".mapped.primertrimmed.sorted.bam"
-
-    if (not os.path.isfile(BAMdb)):
-        st.generateFlatFileDB(seqPath, fileExt=((".bam")), outFile=BAMdb)#, excludeDirs=["work","tmp_bam","qc","test","troubleshooting"])
-
-    if (not os.path.isfile(BAMdata)):
-        BAMs = st.searchFlatFileDB(BAMdb, includeTerms=[nanoBamRE, illBamRE])#,  excludeTerms=["work","ncovIllumina","bai","test","results_old","results_unmerged"])
-        BAMs = pd.DataFrame(BAMs, columns=[cfg.BAMPathCol])       
-        BAMs['Key'] = BAMs[cfg.BAMPathCol].transform(lambda x: os.path.basename(x).split('.')[0])
-        BAMs = BAMs.drop_duplicates(subset=['Key'], keep='last')
-        if (metadata is not None):
-            metadata = pd.read_csv(metadata, low_memory=False) 
-            BAMs = BAMs.merge(metadata, on='Key', how='left')
-            BAMs = BAMs[["Key", cfg.BAMPathCol, "current_lineage","collection_date"]].dropna()
-        else:
-            BAMs = BAMs[["Key", cfg.BAMPathCol]].dropna()
-        BAMs.to_csv(BAMdata, index=False)
-    else:
-        BAMs = pd.read_csv(BAMdata, index_col=False) 
-
-    return BAMs
-#endregion
 
 #region: Freyja
 def runFrejya(BAMfile: list[str], outDir: str, ref: str, refname: str = None) -> str:
@@ -94,7 +58,7 @@ def convertToAggregatedFormat(file):
     :param file: The path to the file
     :return: A demix file in aggregated format
     """    
-    freyja = st.importToDataFrame(file, index_col = 0)
+    freyja = importToDataFrame(file, index_col = 0)
     if len(freyja.columns) == 1: freyja = freyja.set_axis([Path(file).stem], axis=1).transpose()
     return freyja
 
@@ -258,6 +222,7 @@ def codeMissingAsOther(freyja: pd.DataFrame, target:int = 1, colName:str = "Othe
     return (freyja)
 
 def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, log = False):
+
     freyja1, freyja2 = normalizeStrains(freyja1,freyja2)
     freyja1, freyja2 = normalizeSamples(freyja1,freyja2)
 
@@ -317,7 +282,7 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
 #region: Variants
 
 def readFreyjaVariants(files: list[str]):
-    variants = pd.concat([pd.read_csv(fp, sep="\t", index_col = None).assign(file=os.path.basename(fp)) for fp in files])
+    variants = pd.concat([importToDataFrame(fp, sep="\t", index_col = None).assign(file=os.path.basename(fp)) for fp in files])
     names = variants.pop('file')
     variants.insert(0, 'file', names)
     return (variants)
@@ -401,7 +366,6 @@ def generateAuspiceFreqs(freyja:pd.DataFrame, outFile: str):
 
 #endregion
 
-
 #region: accFuncs
 def sigfig(val, n:int = 3):
     """Forces value to specific number of decimal points
@@ -423,4 +387,25 @@ def dateToFractionalWeek(isoDate):
     isoDate = str(year+week)
     return(isoDate)
 
+def importToDataFrame(filename, **kargs):
+    """Generic importer to Pandas dataframes. Supports .csv, .tsv., .xlsx
+    :param filename: The path to the file to import
+    :param **kargs: Additional arguments to the Pandas read function
+    :return: _description_
+    """    
+    fileExt = Path(filename).suffix
+    df = pd.DataFrame()
+    match fileExt:
+        case ".tsv":
+            df = pd.read_csv(filename, sep="\t", **kargs)
+        case ".csv":
+            df = pd.read_csv(filename, **kargs)
+        case ".xlsx":
+            df = pd.read_excel(filename, **kargs)
+        case _:
+            df = filename
+    
+    return df
+
 #endregion
+
