@@ -1,7 +1,6 @@
 
 # Hnoss
-[![Lifecycle:
-experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+ [![Lifecycle: WIP](https://img.shields.io/badge/lifecycle-WIP-yellow.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental) [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/CompEpigen/scMethrix/issues) [![License: GPL3](https://img.shields.io/badge/license-GPL3-lightgrey.svg)](https://www.gnu.org/licenses/gpl-3.0.en.html) [![minimal Python version: 3.10](https://img.shields.io/badge/Python-3.10-6666ff.svg)](https://www.python.org/) [![Package Version = 0.0.1](https://img.shields.io/badge/Package%20version-0.0.1-orange.svg?style=flat-square)](https://github.com/provlab-bioinfo/Hnoss/blob/main/NEWS) [![Last-changedate](https://img.shields.io/badge/last%20change-2023--10--12-yellowgreen.svg)](https://github.com/provlab-bioinfo/Hnoss/blob/main/NEWS)
 
 ## Introduction
 
@@ -10,7 +9,6 @@ Hnoss is an extension of the Freyja<sup>[1](#references)</sup> SARS-CoV-2 strain
 ## Table of Contents
 
 - [Introduction](#introduction)
-- [Quick-Start Guide](#quick-start%guide)
 - [Dependencies](#dependencies)
 - [Installation](#installation)
 - [Input](#input)
@@ -18,36 +16,26 @@ Hnoss is an extension of the Freyja<sup>[1](#references)</sup> SARS-CoV-2 strain
 - [Workflow](#workflow)
 - [References](#references)
 
-## Quick-Start Guide
-
-Import into your script:
-```
-conda activate hnoss-env
-import hnoss
-```
-For details on available arguments, enter:
-```
-hnoss --help
-```
-
 ## Dependencies
 
-[Conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html) is required to build an environment with required workflow dependencies. To create the environment
+See [environment.yml](environment.yml) and [requirements.txt](requirements.txt) for package dependancies.
+
+## Installation
+
+#### Installing via pip and Github:
+
 ```
-conda create -n hnoss-env
-```
-then add the following channels
-```
-conda config --add channels defaults
-conda config --add channels bioconda
-conda config --add channels conda-forge
-```
-and then install hnoss
-```
-conda install hnoss
+pip install git+https://github.com/provlab-bioinfo/hnoss
 ```
 
-See REQUIREMENTS.txt for package dependancies.
+#### Installing via Conda:
+
+[Conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html) is required to build an environment with required workflow dependencies:
+
+```bash
+conda env create -f environment.yml
+conda activate hnoss
+```
 
 ## Input
 This tool runs after Freyja via a flexible import functions. For strain deconvolution, it allows any combination of output files from ```freyja demix``` and ```freyja aggregate```. Please refer to the [Freyja documentation](https://github.com/andersen-lab/Freyja).
