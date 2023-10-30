@@ -4,7 +4,6 @@ setup(
     name='hnoss',
     version='0.1.0-alpha',
     packages=find_packages(exclude=['tests*']),
-    package_dir={"hnoss": "src"},
     description='Hnoss is an extension of the Freyja SARS-CoV-2 strain deconvolution package to allow for easier manipulation and more flexibility.',
     url='https://github.com/provlab-bioinfo/hnoss',
     author='Andrew Lindsay',
