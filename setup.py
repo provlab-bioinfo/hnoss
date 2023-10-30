@@ -1,9 +1,9 @@
-from setuptools import setup, find_namespace_packages
+from setuptools import setup, find_packages
 
 setup(
     name='hnoss',
     version='0.1.0-alpha',
-    packages=find_namespace_packages(),
+    packages=find_packages(exclude=['tests*']),
     package_dir={"hnoss": "src"},
     description='Hnoss is an extension of the Freyja SARS-CoV-2 strain deconvolution package to allow for easier manipulation and more flexibility.',
     url='https://github.com/provlab-bioinfo/hnoss',
@@ -20,5 +20,6 @@ setup(
         'scipy',
         'setuptools',
         'statsmodels'
-    ]
+    ],
+    python_requires='>=3.10, <4'
 )

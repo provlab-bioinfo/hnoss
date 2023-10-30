@@ -1,5 +1,5 @@
 import os, pandas as pd, subprocess, numpy as np
-import src.configSettings as cfg
+import hnoss.configSettings as cfg
 from pathlib import Path
 from datetime import datetime, date
 from json import loads, dumps
