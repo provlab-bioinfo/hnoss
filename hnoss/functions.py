@@ -62,17 +62,32 @@ def convertToAggregatedFormat(file):
     if len(freyja.columns) == 1: freyja = freyja.set_axis([Path(file).stem], axis=1).transpose()
     return freyja
 
-def readFreyjaLineages(files:list[str], summarized = False) -> pd.DataFrame:
+def generateHnoss(files:list[str]) -> pd.DataFrame:
     """Aggregated Freyja lineage files into a single dataframe. Will concatenate both files created with `$freyja demix` or `$freyja aggregate`.
     :param files: The files to concatenate
-    :param summarized: Use the summarized strains?, defaults to False
     :return: A dataframe with the same format as `$freyja aggregate`
-    """    
-    files = files if type(files) is list else [files] 
-    freyja = [convertToAggregatedFormat(f) for f in files]
-    freyja = pd.concat(freyja)
-    freyja = freyja.rename_axis('file').reset_index()
+    """  
+    freyjaRaw = formatFreyjaLineage(files).add_suffix("_RawLineages")
+    freyjaSumm = formatFreyjaLineage(files, summarized=True).add_suffix("_SummarizedLineages")
 
+    freyja = freyjaSumm.join(freyjaRaw).reset_index()
+    dataCols = list(set(freyja.columns) - set(freyjaRaw.columns.to_list()) - set(freyjaSumm.columns.to_list()))
+    freyja = freyja.rename(columns={c: c+'_SampleInfo' for c in freyja.columns if c in dataCols})
+    reverseSplit = lambda str : '_'.join(str.split('_')[::-1])
+    freyja.columns = [reverseSplit(col) for col in freyja.columns.to_list()]
+    idx = freyja.columns.str.split('_', expand=True)
+    freyja.columns = idx
+    idx = pd.MultiIndex.from_product([idx.levels[0], idx.levels[1]])
+    freyja.reindex(columns=idx, fill_value=-1)
+    return freyja
+
+def formatFreyjaLineage(files:list[str], summarized = False) -> pd.DataFrame:
+    """Gets the lineage proportions from Frejya output files(s)
+    :param file: The path to the Freyja output file(s)
+    :return: A DataFrame with columns for lineages and abundances with file, resid, and coverage as the index
+    """ 
+    freyja = readFreyjaLineages(files = files)
+    
     if (summarized):
         freyja[cfg.summarizedCol] = freyja[cfg.summarizedCol].apply(literal_eval)
         freyja = freyja.explode(cfg.summarizedCol).reset_index(drop=True)
@@ -82,20 +97,24 @@ def readFreyjaLineages(files:list[str], summarized = False) -> pd.DataFrame:
         freyja[cfg.abundCol] = freyja[cfg.abundCol].str.split(" ")
         freyja = freyja.explode([cfg.lineageCol,cfg.abundCol]).reset_index(drop=True)
 
-    return freyja
-
-def formatFreyjaLineage(files:list[str], summarized = False) -> pd.DataFrame:
-    """Gets the lineage proportions from Frejya output files(s)
-    :param file: The path to the Freyja output file(s)
-    :return: A DataFrame with columns for lineages and abundances
-    """ 
-    freyja = readFreyjaLineages(files = files, summarized = summarized)
-
     freyja = freyja.drop(columns=[cfg.summarizedCol])
     for col in [cfg.abundCol,cfg.residualCol,cfg.coverageCol]:
         freyja[col] = freyja[col].transform(lambda x: float(sigfig(float(x))))
     freyja = freyja.groupby([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol])[cfg.abundCol].first().unstack() 
+
     return(freyja)
+
+def readFreyjaLineages(files:list[str]) -> pd.DataFrame:
+    """Aggregated Freyja lineage files into a single dataframe. Will concatenate both files created with `$freyja demix` or `$freyja aggregate`.
+    :param files: The files to concatenate
+    :return: A dataframe with the same format as `$freyja aggregate`
+    """    
+    files = files if type(files) is list else [files] 
+    freyja = [convertToAggregatedFormat(f) for f in files]
+    freyja = pd.concat(freyja)
+    freyja = freyja.rename_axis('file').reset_index()
+
+    return freyja
 
 def filterFreyjaLineage(freyja: pd.DataFrame, cutoff: float = 0.05, removeEmpty = True):
     """Filters out low presence lineages
