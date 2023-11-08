@@ -141,38 +141,9 @@ def collapseStrain(freyja: pd.DataFrame, strain: str, aliasor:Aliasor = None):
     if (aliasor == None): aliasor = Aliasor()
     parent = aliasor.parent(strain)
     if (parent != ""): freyja = freyja.rename(columns={strain: parent})
+    
     return freyja
 
-def collapseSamples(freyja:pd.DataFrame, date = True, location = True):
-    """Collapses samples by dates and/or locations. Residuals and coverage are lost.
-    :param freyja: A Freyja output dataset formatted with formatFreyjaOutput()
-    :param date: Collapse by date?, defaults to True
-    :param location: Collapse by location?, defaults to True
-    :return: A DataFrame containing mean of each strain for dates and/or locations
-    """    
-    freyja.drop(columns=[cfg.coverageCol, cfg.residualCol])
-
-    if (date and not location):
-        freyja = freyja.groupby([cfg.collectDateCol]).mean()
-    if (location and not date):
-        freyja = freyja.groupby([cfg.locationCol]).mean()
-    if (date and location):
-        freyja = freyja.groupby([cfg.collectDateCol, cfg.locationCol]).mean()
-    if (not date and not location):
-        freyja = freyja.mean()
-
-    return freyja
-
-def locateFreyjaSamples(freyja: pd.DataFrame) -> pd.DataFrame: 
-    """Adds location and collection date to Freyja DataFrame
-    :param freyja: A DataFrame from collateFreyjaSamples()
-    :return: A DataFrame with location and colletion data
-    """    
-    freyja = freyja.reset_index()
-    freyja[cfg.locationCol] = freyja[cfg.fileCol].transform(lambda x: x[0:2])
-    freyja[cfg.collectDateCol] = freyja[cfg.fileCol].transform(lambda x: datetime.strptime(x[3:9], '%y%m%d').strftime("%Y-%m-%d"))
-    freyja = freyja.set_index(cfg.fileCol)
-    return (freyja)
 
 def normalizeStrains(freyja1: pd.DataFrame, freyja2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
     """Matches the strain columns between two Freyja outputs
