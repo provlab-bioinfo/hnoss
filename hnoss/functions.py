@@ -1,5 +1,5 @@
 import os, pandas as pd, subprocess, numpy as np
-import hnoss.configSettings as cfg
+import configSettings as cfg #import hnoss.configSettings as cfg
 from pathlib import Path
 from datetime import datetime, date
 from json import loads, dumps
@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import statsmodels.api as sm
 from scipy.stats import pearsonr
 from pango_aliasor.aliasor import Aliasor
+
+aliasor = Aliasor()
 
 #region: Freyja
 def runFrejya(BAMfile: list[str], outDir: str, ref: str, refname: str = None) -> str:
@@ -58,9 +60,9 @@ def convertToAggregatedFormat(file):
     :param file: The path to the file
     :return: A demix file in aggregated format
     """    
-    freyja = importToDataFrame(file, index_col = 0)
-    if len(freyja.columns) == 1: freyja = freyja.set_axis([Path(file).stem], axis=1).transpose()
-    return freyja
+    df = importToDataFrame(file, index_col = 0)
+    if len(df.columns) == 1: df = df.set_axis([Path(file).stem], axis=1).transpose()
+    return df
 
 def generateHnoss(files:list[str]) -> pd.DataFrame:
     """Aggregated Freyja lineage files into a single dataframe. Will concatenate both files created with `$freyja demix` or `$freyja aggregate`.
@@ -70,16 +72,16 @@ def generateHnoss(files:list[str]) -> pd.DataFrame:
     freyjaRaw = formatFreyjaLineage(files).add_suffix("_RawLineages")
     freyjaSumm = formatFreyjaLineage(files, summarized=True).add_suffix("_SummarizedLineages")
 
-    freyja = freyjaSumm.join(freyjaRaw).reset_index()
-    dataCols = list(set(freyja.columns) - set(freyjaRaw.columns.to_list()) - set(freyjaSumm.columns.to_list()))
-    freyja = freyja.rename(columns={c: c+'_SampleInfo' for c in freyja.columns if c in dataCols})
+    hnoss = freyjaSumm.join(freyjaRaw).reset_index()
+    dataCols = list(set(hnoss.columns) - set(freyjaRaw.columns.to_list()) - set(freyjaSumm.columns.to_list()))
+    hnoss = hnoss.rename(columns={c: c+'_SampleInfo' for c in hnoss.columns if c in dataCols})
     reverseSplit = lambda str : '_'.join(str.split('_')[::-1])
-    freyja.columns = [reverseSplit(col) for col in freyja.columns.to_list()]
-    idx = freyja.columns.str.split('_', expand=True)
-    freyja.columns = idx
+    hnoss.columns = [reverseSplit(col) for col in hnoss.columns.to_list()]
+    idx = hnoss.columns.str.split('_', expand=True)
+    hnoss.columns = idx
     idx = pd.MultiIndex.from_product([idx.levels[0], idx.levels[1]])
-    freyja.reindex(columns=idx, fill_value=-1)
-    return freyja
+    hnoss.reindex(columns=idx, fill_value=-1)
+    return hnoss
 
 def formatFreyjaLineage(files:list[str], summarized = False) -> pd.DataFrame:
     """Gets the lineage proportions from Frejya output files(s)
@@ -230,8 +232,7 @@ def normalizeValues(hnoss: pd.DataFrame, max:int = 1) -> pd.DataFrame:
     hnoss = hnoss.div(hnoss.sum(axis=1), axis=0)
     return(hnoss.applymap(sigfig)*max)
 
-def unaliasCols(hnoss: pd.DataFrame):
-    aliasor = Aliasor()
+def unaliasCols(hnoss: pd.DataFrame, aliasor:Aliasor = aliasor):
     hnoss.columns = [aliasor.uncompress(col) for col in hnoss.columns.to_list()]
     return hnoss
 
