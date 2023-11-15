@@ -116,53 +116,86 @@ def readFreyjaLineages(files:list[str]) -> pd.DataFrame:
 
     return freyja
 
-def filterFreyjaLineage(freyja: pd.DataFrame, cutoff: float = 0.05, removeEmpty = True):
+def filterLineage(hnoss: pd.DataFrame, cutoff: float = 0.05):
     """Filters out low presence lineages
-    :param freyja: A formatted Freyja lineage from formatFreyjaLineage() 
+    :param hnoss: The input dataset
     :param cutoff: The cut-off value to exclude
-    :return: Freyja lineages with value below cutoff replaced with NaN
+    :return: Lineages with value below cutoff replaced with NaN
     """    
-    freyja = freyja.mask(freyja < cutoff, np.nan)
-    if removeEmpty:
-        freyja = freyja.dropna(axis = 1, how='all')
-    return freyja
+    hnoss['RawLineages'] = hnoss['RawLineages'].mask(hnoss['RawLineages'] < cutoff, np.nan)
+    return hnoss
 
-def collapseFreyjaLineage(freyja: pd.DataFrame, strains: list[str]):
-    """ Collapses Freyja lineages. Cannot parse down past "A","B" or any recombinant strains
-    :param freyja: A Freyja output dataset formatted with formatFreyjaOutput()
+def collapseToLineages(hnoss: pd.DataFrame, strains: list[str], aliasor:Aliasor = aliasor):
+    """ Collapses lineages. Cannot parse down past "A","B" or any recombinant strains
+    :param hnoss: The input dataset
     :param strains: The strains to parse down until
     """    
-    aliasor = Aliasor()
-
     while(True):
-        cols = list(freyja.columns)
-        cols = [col for col in cols if col not in [cfg.fileCol, cfg.residualCol, cfg.coverageCol]]    
-        badcols = set([strain for strain in cols if strain not in strains])
-        beforeCols = set(freyja.columns)
-
-        for strain in badcols: 
-            freyja = collapseStrain(freyja, strain, aliasor)
-            
-        freyja = freyja.groupby(freyja.columns, axis=1).sum()
-        freyja = freyja.replace({0:np.nan})
-
+        cols = list(freyja['RawLineages'].columns)
+        badStrains = set([strain for strain in cols if strain not in strains])
+        beforeCols = set(freyja.columns)        
+        freyja = collapseStrains(freyja, badStrains, aliasor)
         if (beforeCols == set(freyja.columns)): break
 
     return freyja
 
-def collapseStrain(freyja: pd.DataFrame, strain: str, aliasor:Aliasor = None):
+def removeNALineages(hnoss: pd.DataFrame):
+    """Removes all the NA lineages from a dataset
+    :param hnoss: The input dataset
+    :return: A dataset with all NA lineages removed
+    """    
+    return hnoss.dropna(axis = 1, how='all')
+
+def collapseToValue(hnoss: pd.DataFrame, value: float = 0.05):
+    """Collapse strains below a specified cut-off. Works by samples.
+    :param hnoss: The input dataset
+    :param value: The cut-off proportion, defaults to 0.05
+    :return: _description_
+    """    
+    raw = hnoss['RawLineages']
+    raw = [collapseRow(raw.iloc[[idx]], value) for idx in range(len(raw))]
+    new = pd.concat([pd.DataFrame([], columns=hnoss['RawLineages'].columns)] + raw)    
+    new = new[list(hnoss['RawLineages'].columns)]
+    hnoss['RawLineages'] = new
+    return hnoss
+
+def collapseRow(hnoss: pd.DataFrame, value: float = 0.05, aliasor:Aliasor = aliasor):
+    """Collapse a single row in a dataset by value
+    :param hnoss: The input row
+    :param value: The cut-off proportion, defaults to 0.05 
+    :param aliasor: A pango_aliasor object, defaults to aliasor
+    :return: _description_
+    """    
+    if (len(hnoss.index) != 1): raise ValueError("Only accepts dataframes with a single row.")
+
+    while(True):
+        cols = list(hnoss.columns)
+        badStrains = set([strain for strain in cols if hnoss[strain].sum() < value])        
+        hnoss = collapseStrains(hnoss, badStrains, aliasor)
+        if (set(cols) == set(hnoss.columns)): break
+    
+    return hnoss
+
+def collapseStrains(hnoss: pd.DataFrame, strains: str, aliasor:Aliasor = aliasor):
     """Collapse a single strain in a formatted Freyja dataset
-    :param freyja: A Freyja output dataset formatted with formatFreyjaOutput()
+    TODO: Technically can collapse the sample info and summarized lineages. Probably shouldn't be able to do that.
+    :param hnoss: The input dataset
     :param strain: The name of the strain to collapse. If it's a terminal parent (e.g., 'A','B', any 'X' strain), it cannot be collapsed further.
-    :param aliasor: A pango_aliasor object. Will be generated if not specified (adds significant runtime if done repeatedly), defaults to None
+    :param aliasor: A pango_aliasor object, defaults to aliasor
     :return: A Freyja dataset with the collapsed strain (if possible)
     """        
-    if (aliasor == None): aliasor = Aliasor()
-    parent = aliasor.parent(strain)
-    if (parent != ""): freyja = freyja.rename(columns={strain: parent})
-    
-    return freyja
+    strains = [strains] if type(strains) == str else strains
 
+    for strain in strains:
+        parent = aliasor.parent(strain)
+        if (parent != ""): hnoss = hnoss.rename(columns={strain: parent})
+
+    ord = list(dict.fromkeys(list(hnoss.columns.get_level_values(0))))
+    hnoss = hnoss.groupby(level=list(range(hnoss.columns.nlevels)), axis=1).sum()
+    hnoss = hnoss[ord]
+    hnoss = hnoss.replace({0:np.nan})
+
+    return hnoss
 
 def normalizeStrains(hnoss1: pd.DataFrame, hnoss2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
     """Matches the strain columns between two datasets
