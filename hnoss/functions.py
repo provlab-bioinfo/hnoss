@@ -115,7 +115,6 @@ def readFreyjaLineages(files:list[str]) -> pd.DataFrame:
     freyja = [convertToAggregatedFormat(f) for f in files]
     freyja = pd.concat(freyja)
     freyja = freyja.rename_axis('file').reset_index()
-
     return freyja
 
 def filterLineage(hnoss: pd.DataFrame, cutoff: float = 0.05):
@@ -133,13 +132,12 @@ def collapseToLineages(hnoss: pd.DataFrame, strains: list[str], aliasor:Aliasor 
     :param strains: The strains to parse down until
     """    
     while(True):
-        cols = list(freyja['RawLineages'].columns)
+        cols = list(hnoss['RawLineages'].columns)
         badStrains = set([strain for strain in cols if strain not in strains])
-        beforeCols = set(freyja.columns)        
-        freyja = collapseStrains(freyja, badStrains, aliasor)
-        if (beforeCols == set(freyja.columns)): break
-
-    return freyja
+        beforeCols = hnoss.columns
+        hnoss = collapseStrains(hnoss, badStrains, aliasor)
+        if (set(beforeCols) == set(hnoss.columns)): break
+    return hnoss
 
 def removeNALineages(hnoss: pd.DataFrame):
     """Removes all the NA lineages from a dataset
@@ -148,11 +146,11 @@ def removeNALineages(hnoss: pd.DataFrame):
     """    
     return hnoss.dropna(axis = 1, how='all')
 
-def collapseToValue(hnoss: pd.DataFrame, value: float = 0.05):
+def collapseByValue(hnoss: pd.DataFrame, value: float = 0.05):
     """Collapse strains below a specified cut-off. Works by samples.
     :param hnoss: The input dataset
     :param value: The cut-off proportion, defaults to 0.05
-    :return: _description_
+    :return: A collapsed dataframe.
     """    
     raw = hnoss['RawLineages']
     raw = [collapseRow(raw.iloc[[idx]], value) for idx in range(len(raw))]
@@ -166,7 +164,7 @@ def collapseRow(hnoss: pd.DataFrame, value: float = 0.05, aliasor:Aliasor = alia
     :param hnoss: The input row
     :param value: The cut-off proportion, defaults to 0.05 
     :param aliasor: A pango_aliasor object, defaults to aliasor
-    :return: _description_
+    :return: A collapsed row.
     """    
     if (len(hnoss.index) != 1): raise ValueError("Only accepts dataframes with a single row.")
 
@@ -229,8 +227,16 @@ def normalizeValues(hnoss: pd.DataFrame, max:int = 1) -> pd.DataFrame:
     :param max: The upper bound of the range for normalization [0,max], defaults to 0
     :return: A normalized dataframe
     """    
-    hnoss = hnoss.div(hnoss.sum(axis=1), axis=0)
-    return(hnoss.applymap(sigfig)*max)
+    def norm(col):
+        data = hnoss[col]
+        data = data.div(data.sum(axis=1), axis=0)
+        data = data.applymap(sigfig)*max
+        return data
+
+    hnoss['SummarizedLineages'] = norm('SummarizedLineages')
+    hnoss['RawLineages'] = norm('RawLineages')
+        
+    return(hnoss)
 
 def unaliasCols(hnoss: pd.DataFrame, aliasor:Aliasor = aliasor):
     hnoss.columns = [aliasor.uncompress(col) for col in hnoss.columns.to_list()]
@@ -324,26 +330,6 @@ def findMutations(variants: pd.DataFrame, mutations: pd.DataFrame) -> pd.DataFra
     found = mutations.merge(variants, on=['POS', 'REF', 'ALT'])
     found = found[variants.columns]
     return (found)
-
-#endregion
-
-#region: internal functions
-def addIDs(freyja: pd.DataFrame, IDs: str) -> pd.DataFrame:
-    IDs = pd.read_csv(IDs, sep="\t", index_col = None)
-    
-
-
-
-
-
-    IDs['Key'].assign(subkey = lambda key: x.temp_c * 9 / 5 + 32)
-
-
-
-
-
-
-
 
 #endregion
 
