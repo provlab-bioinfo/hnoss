@@ -164,68 +164,68 @@ def collapseStrain(freyja: pd.DataFrame, strain: str, aliasor:Aliasor = None):
     return freyja
 
 
-def normalizeStrains(freyja1: pd.DataFrame, freyja2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
-    """Matches the strain columns between two Freyja outputs
-    :param freyja1: the first DataFrame
-    :param freyja2: the second DataFrame
+def normalizeStrains(hnoss1: pd.DataFrame, hnoss2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
+    """Matches the strain columns between two datasets
+    :param hnoss1: the first DataFrame
+    :param hnoss2: the second DataFrame
     :return: The modified dataframes
     """    
-    strains = list(set(freyja1.columns.values) | set(freyja2.columns.values))
-    freyja1 = freyja1.reindex(columns=strains)
-    freyja2 = freyja2.reindex(columns=strains)
-    return freyja1, freyja2
+    strains = list(set(hnoss1.columns.values) | set(hnoss2.columns.values))
+    hnoss1 = hnoss1.reindex(columns=strains)
+    hnoss2 = hnoss2.reindex(columns=strains)
+    return hnoss1, hnoss2
 
-def normalizeSamples(freyja1: pd.DataFrame, freyja2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
-    """Matches the strain columns between two Freyja outputs
-    :param freyja1: the first DataFrame
-    :param freyja2: the second DataFrame
+def normalizeSamples(hnoss1: pd.DataFrame, hnoss2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
+    """Matches the strain columns between two datasets
+    :param hnoss1: the first DataFrame
+    :param hnoss2: the second DataFrame
     :return: The modified dataframes
     """    
-    freyja1 = freyja1.droplevel([cfg.residualCol, cfg.coverageCol])
-    freyja2 = freyja2.droplevel([cfg.residualCol, cfg.coverageCol])
-    indexes = list(set(freyja1.index.values) | set(freyja2.index.values))
-    freyja1 = freyja1.reindex(index=indexes)
-    freyja2 = freyja2.reindex(index=indexes)
-    return freyja1, freyja2
+    hnoss1 = hnoss1.droplevel([cfg.residualCol, cfg.coverageCol])
+    hnoss2 = hnoss2.droplevel([cfg.residualCol, cfg.coverageCol])
+    indexes = list(set(hnoss1.index.values) | set(hnoss2.index.values))
+    hnoss1 = hnoss1.reindex(index=indexes)
+    hnoss2 = hnoss2.reindex(index=indexes)
+    return hnoss1, hnoss2
 
-def normalizeValues(freyja: pd.DataFrame, max:int = 1) -> pd.DataFrame:
+def normalizeValues(hnoss: pd.DataFrame, max:int = 1) -> pd.DataFrame:
     """Normalizes values for wastewater strains
-    :param freyja: A Freyja dataframe
+    :param hnoss: A hnoss dataframe
     :param max: The upper bound of the range for normalization [0,max], defaults to 0
     :return: A normalized dataframe
     """    
-    freyja = freyja.div(freyja.sum(axis=1), axis=0)
-    return(freyja.applymap(sigfig)*max)
+    hnoss = hnoss.div(hnoss.sum(axis=1), axis=0)
+    return(hnoss.applymap(sigfig)*max)
 
-def unaliasCols(freyja: pd.DataFrame):
+def unaliasCols(hnoss: pd.DataFrame):
     aliasor = Aliasor()
-    freyja.columns = [aliasor.uncompress(col) for col in freyja.columns.to_list()]
-    return freyja
+    hnoss.columns = [aliasor.uncompress(col) for col in hnoss.columns.to_list()]
+    return hnoss
 
-def codeMissingAsOther(freyja: pd.DataFrame, target:int = 1, colName:str = "Other") -> pd.DataFrame:
+def codeMissingAsOther(hnoss: pd.DataFrame, target:int = 1, colName:str = "Other") -> pd.DataFrame:
     """Adds a column for the missing strain proportion of each sample 
-    :param freyja: A Freyja dataframe
+    :param hnoss: A hnoss dataframe
     :param colName: The column name, defaults to "Other"
     :return: A dataframe with a column named 'colName'
     """    
-    freyja[colName] = target-freyja.sum(axis=1)
-    return (freyja)
+    hnoss[colName] = target-hnoss.sum(axis=1)
+    return (hnoss)
 
-def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, log = False):
+def compareRuns(hnoss1, hnoss2, xlab, ylab, type="scatter", outFile = None, log = False):
 
-    freyja1, freyja2 = normalizeStrains(freyja1,freyja2)
-    freyja1, freyja2 = normalizeSamples(freyja1,freyja2)
+    hnoss1, hnoss2 = normalizeStrains(hnoss1,hnoss2)
+    hnoss1, hnoss2 = normalizeSamples(hnoss1,hnoss2)
 
-    cols = list(set(freyja1.columns.to_list()) | set(freyja2.columns.to_list()))
-    freyja1 = freyja1.reset_index().melt(id_vars = "file", value_vars = cols, var_name = "lineage", value_name='run1')
-    freyja2 = freyja2.reset_index().melt(id_vars = "file", value_vars = cols, var_name = "lineage", value_name='run2')
-    freyja = freyja1.merge(freyja2, on=['file','lineage'])
+    cols = list(set(hnoss1.columns.to_list()) | set(hnoss2.columns.to_list()))
+    hnoss1 = hnoss1.reset_index().melt(id_vars = "file", value_vars = cols, var_name = "lineage", value_name='run1')
+    hnoss2 = hnoss2.reset_index().melt(id_vars = "file", value_vars = cols, var_name = "lineage", value_name='run2')
+    hnoss = hnoss1.merge(hnoss2, on=['file','lineage'])
 
-    freyja = freyja[freyja[['run1','run2']].sum(axis=1) > 0].fillna(0)
-    freyja = freyja.sort_values(by=['file','lineage'])
+    hnoss = hnoss[hnoss[['run1','run2']].sum(axis=1) > 0].fillna(0)
+    hnoss = hnoss.sort_values(by=['file','lineage'])
    
-    x = freyja['run1'].to_numpy().flatten()
-    y = freyja['run2'].to_numpy().flatten()
+    x = hnoss['run1'].to_numpy().flatten()
+    y = hnoss['run2'].to_numpy().flatten()
 
     idx = np.isfinite(x) & np.isfinite(y) & np.where(np.add(x,y) != 0,True,False)
 
@@ -266,7 +266,7 @@ def compareRuns(freyja1, freyja2, xlab, ylab, type="scatter", outFile = None, lo
     else:
         plt.savefig(outFile)
 
-    return freyja
+    return hnoss
 #endregion
 
 #region: Variants
@@ -314,20 +314,20 @@ def addIDs(freyja: pd.DataFrame, IDs: str) -> pd.DataFrame:
 #endregion
 
 #region: plotting
-def plotFreyja(freyja: pd.DataFrame) -> pd.DataFrame:
-    freyja = collapseSamples(freyja, date = True, location = True)
+def plotHnoss(hnoss: pd.DataFrame) -> pd.DataFrame:
+    hnoss = collapseSamples(hnoss, date = True, location = True)
 
-def generateAuspiceFreqs(freyja:pd.DataFrame, outFile: str):
+def generateAuspiceFreqs(hnoss:pd.DataFrame, outFile: str):
     """Generates tip_frequences.json for Auspice. Each entry will have frequency proportion only for the day the reading was taken
-    :param freyja: a formatted Freyja DataFrame
+    :param hnoss: a formatted hnoss DataFrame
     :param outFile: The output JSON
     """    
-    freyja[cfg.weekCol] = freyja[cfg.collectDateCol].transform(lambda x: fn.dateToFractionalWeek(x))
+    hnoss[cfg.weekCol] = hnoss[cfg.collectDateCol].transform(lambda x: fn.dateToFractionalWeek(x))
 
     # Generate frequencies JSON
-    freqs = sorted(list(set(freyja[cfg.weekCol].values)))
-    freqs = pd.DataFrame(index = freyja.index.values.tolist(),columns = freqs)
-    for index, row in freyja.iterrows(): freqs.at[index, row[cfg.weekCol]] = 1
+    freqs = sorted(list(set(hnoss[cfg.weekCol].values)))
+    freqs = pd.DataFrame(index = hnoss.index.values.tolist(),columns = freqs)
+    for index, row in hnoss.iterrows(): freqs.at[index, row[cfg.weekCol]] = 1
     freqs.update(freqs.div(freqs.sum(axis=0),axis=1).fillna(0))
     freqs[cfg.freqCol] = freqs.values.tolist()
     pivots = list(freqs.columns)
