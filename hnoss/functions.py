@@ -139,13 +139,6 @@ def collapseToLineages(hnoss: pd.DataFrame, strains: list[str], aliasor:Aliasor 
         if (set(beforeCols) == set(hnoss.columns)): break
     return hnoss
 
-def removeNALineages(hnoss: pd.DataFrame):
-    """Removes all the NA lineages from a dataset
-    :param hnoss: The input dataset
-    :return: A dataset with all NA lineages removed
-    """    
-    return hnoss.dropna(axis = 1, how='all')
-
 def collapseByValue(hnoss: pd.DataFrame, value: float = 0.05):
     """Collapse strains below a specified cut-off. Works by samples.
     :param hnoss: The input dataset
@@ -157,6 +150,27 @@ def collapseByValue(hnoss: pd.DataFrame, value: float = 0.05):
     new = pd.concat([pd.DataFrame([], columns=hnoss['RawLineages'].columns)] + raw)    
     new = new[list(hnoss['RawLineages'].columns)]
     hnoss['RawLineages'] = new
+    return hnoss
+
+def collapseStrains(hnoss: pd.DataFrame, strains: str, aliasor:Aliasor = aliasor):
+    """Collapses down to specified strains to their parent lineages
+    TODO: Technically can collapse the sample info and summarized lineages. Probably shouldn't be able to do that.
+    :param hnoss: The input dataset
+    :param strain: The name of the strain to collapse. If it's a terminal parent (e.g., 'A','B', any 'X' strain), it cannot be collapsed further.
+    :param aliasor: A pango_aliasor object, defaults to aliasor
+    :return: A Freyja dataset with the collapsed strain (if possible)
+    """        
+    strains = [strains] if type(strains) == str else strains
+
+    for strain in strains:
+        parent = aliasor.parent(strain)
+        if (parent != ""): hnoss = hnoss.rename(columns={strain: parent})
+
+    ord = list(dict.fromkeys(list(hnoss.columns.get_level_values(0))))
+    hnoss = hnoss.groupby(level=list(range(hnoss.columns.nlevels)), axis=1).sum()
+    hnoss = hnoss[ord]
+    hnoss = hnoss.replace({0:np.nan})
+
     return hnoss
 
 def collapseRow(hnoss: pd.DataFrame, value: float = 0.05, aliasor:Aliasor = aliasor):
@@ -176,26 +190,12 @@ def collapseRow(hnoss: pd.DataFrame, value: float = 0.05, aliasor:Aliasor = alia
     
     return hnoss
 
-def collapseStrains(hnoss: pd.DataFrame, strains: str, aliasor:Aliasor = aliasor):
-    """Collapse a single strain in a formatted Freyja dataset
-    TODO: Technically can collapse the sample info and summarized lineages. Probably shouldn't be able to do that.
+def removeNALineages(hnoss: pd.DataFrame):
+    """Removes all the NA lineages from a dataset
     :param hnoss: The input dataset
-    :param strain: The name of the strain to collapse. If it's a terminal parent (e.g., 'A','B', any 'X' strain), it cannot be collapsed further.
-    :param aliasor: A pango_aliasor object, defaults to aliasor
-    :return: A Freyja dataset with the collapsed strain (if possible)
-    """        
-    strains = [strains] if type(strains) == str else strains
-
-    for strain in strains:
-        parent = aliasor.parent(strain)
-        if (parent != ""): hnoss = hnoss.rename(columns={strain: parent})
-
-    ord = list(dict.fromkeys(list(hnoss.columns.get_level_values(0))))
-    hnoss = hnoss.groupby(level=list(range(hnoss.columns.nlevels)), axis=1).sum()
-    hnoss = hnoss[ord]
-    hnoss = hnoss.replace({0:np.nan})
-
-    return hnoss
+    :return: A dataset with all NA lineages removed
+    """    
+    return hnoss.dropna(axis = 1, how='all')
 
 def normalizeStrains(hnoss1: pd.DataFrame, hnoss2:pd.DataFrame) -> list[pd.DataFrame, pd.DataFrame]:
     """Matches the strain columns between two datasets
