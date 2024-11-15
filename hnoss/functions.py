@@ -102,8 +102,9 @@ def formatFreyjaLineage(files:list[str], summarized = False) -> pd.DataFrame:
     freyja = freyja.drop(columns=[cfg.summarizedCol])
     for col in [cfg.abundCol,cfg.residualCol,cfg.coverageCol]:
         freyja[col] = freyja[col].transform(lambda x: float(sigfig(float(x))))
-    freyja = freyja.groupby([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol])[cfg.abundCol].first().unstack() 
-
+    otherCols = set(freyja.columns)-set([cfg.fileCol, cfg.residualCol, cfg.coverageCol, cfg.lineageCol, cfg.abundCol])
+    freyja = freyja.groupby(list([cfg.fileCol, cfg.residualCol, cfg.coverageCol]) + list(otherCols) + list([cfg.lineageCol]))[cfg.abundCol].first().unstack() 
+    
     return(freyja)
 
 def readFreyjaLineages(files:list[str]) -> pd.DataFrame:
